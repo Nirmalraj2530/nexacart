@@ -1,4 +1,4 @@
-"use client";
+
 
 import React, { useState, useEffect, Suspense, useMemo } from "react";
 import Link from "next/link";
@@ -8,13 +8,7 @@ import { selectOrders, hydrateOrders } from "@/redux/slices/orderSlice";
 import { formatCurrency } from "@/utils/formatters";
 import { Button } from "@/components/common/Button";
 import { LiveDeliveryTracker } from "@/components/order/LiveDeliveryTracker";
-import {
-  Truck,
-  Search,
-  ArrowRight,
-  Calendar,
-  AlertCircle,
-} from "lucide-react";
+import { Truck, Search, ArrowRight, Calendar, AlertCircle } from "lucide-react";
 
 function TrackOrderContent() {
   const searchParams = useSearchParams();
@@ -153,10 +147,13 @@ function TrackOrderContent() {
                 <span className="text-sm font-black text-slate-900 flex items-center gap-1.5 justify-end">
                   <Calendar className="w-4 h-4 text-indigo-600" />
                   {activeOrder.estimatedDelivery
-                    ? new Date(activeOrder.estimatedDelivery).toLocaleDateString(
-                        "en-US",
-                        { weekday: "short", month: "short", day: "numeric" },
-                      )
+                    ? new Date(
+                        activeOrder.estimatedDelivery,
+                      ).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })
                     : "Within 3-5 days"}
                 </span>
               </div>
