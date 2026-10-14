@@ -16,6 +16,7 @@ import {
   selectAuthUser,
   selectIsAuthenticated,
   openLoginModal,
+  openRegisterModal,
   setUserProfile,
   logout,
 } from "@/redux/slices/authSlice";
@@ -39,6 +40,7 @@ import {
   Heart,
   Scale,
   Truck,
+  UserPlus,
 } from "lucide-react";
 
 export function Header() {
@@ -228,12 +230,21 @@ export function Header() {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => dispatch(openLoginModal())}
-                  className="btn btn-outline btn-sm"
-                >
-                  <UserIcon style={{ width: "0.875rem", height: "0.875rem" }} /> Sign In
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                  <button
+                    onClick={() => dispatch(openLoginModal())}
+                    className="btn btn-outline btn-sm"
+                  >
+                    <UserIcon style={{ width: "0.875rem", height: "0.875rem" }} /> Sign In
+                  </button>
+                  <button
+                    onClick={() => dispatch(openRegisterModal())}
+                    className="btn btn-primary btn-sm hidden sm:inline-flex"
+                    style={{ fontSize: "0.75rem", padding: "0.375rem 0.625rem" }}
+                  >
+                    <UserPlus style={{ width: "0.875rem", height: "0.875rem" }} /> Register
+                  </button>
+                </div>
               )}
 
               {/* Cart Button */}
@@ -430,16 +441,28 @@ export function Header() {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={() => {
-                    dispatch(openLoginModal());
-                    dispatch(setMobileMenuOpen(false));
-                  }}
-                  className="btn btn-primary btn-full btn-sm"
-                  style={{ fontWeight: 700 }}
-                >
-                  <UserIcon style={{ width: "0.875rem", height: "0.875rem" }} /> Sign In / Create Account
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <button
+                    onClick={() => {
+                      dispatch(openLoginModal());
+                      dispatch(setMobileMenuOpen(false));
+                    }}
+                    className="btn btn-outline btn-full btn-sm"
+                    style={{ fontWeight: 700 }}
+                  >
+                    <UserIcon style={{ width: "0.875rem", height: "0.875rem" }} /> Sign In
+                  </button>
+                  <button
+                    onClick={() => {
+                      dispatch(openRegisterModal());
+                      dispatch(setMobileMenuOpen(false));
+                    }}
+                    className="btn btn-primary btn-full btn-sm"
+                    style={{ fontWeight: 700 }}
+                  >
+                    <UserPlus style={{ width: "0.875rem", height: "0.875rem" }} /> Create Account (Register)
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -15,6 +15,26 @@ export const validatePassword = (password) => {
   return null;
 };
 
+export const validateUserName = (name) => {
+  if (!name || !name.trim()) return "Full name is required";
+  if (name.trim().length < 2) return "Name must be at least 2 characters long";
+  return null;
+};
+
+export const validateUserForm = (formData) => {
+  const errors = {};
+  const nameError = validateUserName(formData.name);
+  if (nameError) errors.name = nameError;
+  const emailError = validateEmail(formData.email);
+  if (emailError) errors.email = emailError;
+  const passwordError = validatePassword(formData.password);
+  if (passwordError) errors.password = passwordError;
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
 export const validateProductTitle = (title) => {
   if (!title || !title.trim()) return "Product title is required";
   if (title.trim().length < 3) return "Title must be at least 3 characters long";

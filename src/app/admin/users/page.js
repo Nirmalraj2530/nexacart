@@ -81,17 +81,27 @@ export default function AdminUsersPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const sanitizedData = {
+      ...formData,
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      avatar: formData.avatar?.trim() || "https://picsum.photos/800",
+    };
+
     try {
       if (editUser) {
-        await updateUser({ id: editUser.id, ...formData }).unwrap();
-        dispatch(addToast({ message: `Updated user "${formData.name}"`, type: "success" }));
+        await updateUser({ id: editUser.id, ...sanitizedData }).unwrap();
+        dispatch(addToast({ message: `Updated user "${sanitizedData.name}"`, type: "success" }));
       } else {
-        await createUser(formData).unwrap();
-        dispatch(addToast({ message: `Created user "${formData.name}"`, type: "success" }));
+        await createUser(sanitizedData).unwrap();
+        dispatch(addToast({ message: `Created user "${sanitizedData.name}"`, type: "success" }));
       }
       setModalOpen(false);
     } catch (err) {
-      dispatch(addToast({ message: err?.data?.message || "Operation failed", type: "error" }));
+      const msg = Array.isArray(err?.data?.message)
+        ? err.data.message.join(", ")
+        : err?.data?.message || err?.message || "Operation failed";
+      dispatch(addToast({ message: msg, type: "error" }));
     }
   };
 

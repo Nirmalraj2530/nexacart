@@ -61,3 +61,4 @@ jobs:
         env:
           NODE_ENV: production
         run: npm run build
+

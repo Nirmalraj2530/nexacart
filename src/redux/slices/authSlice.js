@@ -9,6 +9,7 @@ const initialState = {
   user: null,
   isAuthenticated: false,
   isLoginModalOpen: false,
+  authModalTab: "login", // "login" | "register"
   isHydrated: false,
 };
 
@@ -64,8 +65,16 @@ const authSlice = createSlice({
         localStorage.removeItem("nexacart_user");
       }
     },
-    openLoginModal: (state) => {
+    openLoginModal: (state, action) => {
       state.isLoginModalOpen = true;
+      state.authModalTab = action?.payload === "register" ? "register" : "login";
+    },
+    openRegisterModal: (state) => {
+      state.isLoginModalOpen = true;
+      state.authModalTab = "register";
+    },
+    setAuthModalTab: (state, action) => {
+      state.authModalTab = action.payload === "register" ? "register" : "login";
     },
     closeLoginModal: (state) => {
       state.isLoginModalOpen = false;
@@ -79,12 +88,15 @@ export const {
   setUserProfile,
   logout,
   openLoginModal,
+  openRegisterModal,
+  setAuthModalTab,
   closeLoginModal,
 } = authSlice.actions;
 
 export const selectAuthUser = (state) => state.auth.user;
 export const selectIsAuthenticated = (state) => state.auth.isAuthenticated;
 export const selectIsLoginModalOpen = (state) => state.auth.isLoginModalOpen;
+export const selectAuthModalTab = (state) => state.auth.authModalTab || "login";
 export const selectIsHydrated = (state) => state.auth.isHydrated;
 
 export default authSlice.reducer;

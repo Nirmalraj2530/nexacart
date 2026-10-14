@@ -10,6 +10,7 @@ import {
   setCredentials,
   logout as logoutAction,
   openLoginModal,
+  openRegisterModal,
   closeLoginModal,
 } from "@/redux/slices/authSlice";
 import { addToast } from "@/redux/slices/uiSlice";
@@ -111,6 +112,10 @@ export function useAuth() {
     dispatch(openLoginModal());
   }, [dispatch]);
 
+  const openRegister = useCallback(() => {
+    dispatch(openRegisterModal());
+  }, [dispatch]);
+
   const closeLogin = useCallback(() => {
     dispatch(closeLoginModal());
   }, [dispatch]);
@@ -127,6 +132,7 @@ export function useAuth() {
     logout,
     simulateSessionExpired,
     openLogin,
+    openRegister,
     closeLogin,
   };
 }

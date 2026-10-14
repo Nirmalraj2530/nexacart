@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { formatCurrency, isDummyPlaceholder, truncateText } from "../src/utils/formatters.js";
+import { validateUserName, validateUserForm, validateEmail, validatePassword } from "../src/utils/validators.js";
 import nextConfig from "../next.config.mjs";
 
 describe("NexaCart Project Sanity & Smoke Suite", () => {
@@ -64,6 +65,46 @@ describe("NexaCart Project Sanity & Smoke Suite", () => {
       assert.ok(truncated.endsWith("..."));
       assert.ok(truncated.length <= 18);
       assert.equal(truncateText("Short", 20), "Short");
+    });
+  });
+
+  describe("User Registration & Auth Validation Tests", () => {
+    it("validateUserName checks valid and invalid names", () => {
+      assert.equal(validateUserName("John Doe"), null);
+      assert.notEqual(validateUserName(""), null);
+      assert.notEqual(validateUserName("J"), null);
+    });
+
+    it("validateEmail validates correct and incorrect email addresses", () => {
+      assert.equal(validateEmail("user@example.com"), null);
+      assert.notEqual(validateEmail("invalid-email"), null);
+      assert.notEqual(validateEmail(""), null);
+    });
+
+    it("validatePassword validates minimum length", () => {
+      assert.equal(validatePassword("password123"), null);
+      assert.notEqual(validatePassword("123"), null);
+      assert.notEqual(validatePassword(""), null);
+    });
+
+    it("validateUserForm validates full registration payload", () => {
+      const valid = validateUserForm({
+        name: "Alice Smith",
+        email: "alice@example.com",
+        password: "securepassword",
+      });
+      assert.equal(valid.isValid, true);
+      assert.equal(Object.keys(valid.errors).length, 0);
+
+      const invalid = validateUserForm({
+        name: "",
+        email: "not-an-email",
+        password: "12",
+      });
+      assert.equal(invalid.isValid, false);
+      assert.ok(invalid.errors.name);
+      assert.ok(invalid.errors.email);
+      assert.ok(invalid.errors.password);
     });
   });
 });

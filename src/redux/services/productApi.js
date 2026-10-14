@@ -120,6 +120,15 @@ export const productApi = createApi({
       invalidatesTags: [{ type: "Users", id: "LIST" }],
     }),
 
+    registerUser: builder.mutation({
+      query: (userData) => ({
+        url: "/users",
+        method: "POST",
+        body: userData,
+      }),
+      invalidatesTags: [{ type: "Users", id: "LIST" }],
+    }),
+
     updateUser: builder.mutation({
       query: ({ id, ...patch }) => ({
         url: `/users/${id}`,
@@ -267,6 +276,7 @@ export const {
   useGetUsersQuery,
   useGetUserByIdQuery,
   useCreateUserMutation,
+  useRegisterUserMutation,
   useUpdateUserMutation,
   useDeleteUserMutation,
   useCheckUserAvailabilityMutation,
