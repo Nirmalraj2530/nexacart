@@ -5,19 +5,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { selectOrders, hydrateOrders } from "@/redux/slices/orderSlice";
-import { getOrderTimeline, ORDER_STATUSES } from "@/data/mockOrders";
-import { formatCurrency, cleanImageUrl } from "@/utils/formatters";
+import { formatCurrency } from "@/utils/formatters";
 import { Button } from "@/components/common/Button";
-import { Input } from "@/components/common/Input";
+import { LiveDeliveryTracker } from "@/components/order/LiveDeliveryTracker";
 import {
   Truck,
   Search,
-  CheckCircle2,
-  Clock,
-  Package,
-  MapPin,
   ArrowRight,
-  ShieldCheck,
   Calendar,
   AlertCircle,
 } from "lucide-react";
@@ -53,10 +47,6 @@ function TrackOrderContent() {
     e.preventDefault();
     setSubmittedQuery(searchQuery);
   };
-
-  const timeline = activeOrder
-    ? getOrderTimeline(activeOrder.status, activeOrder.createdAt)
-    : [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16 space-y-10">
@@ -141,141 +131,91 @@ function TrackOrderContent() {
       )}
 
       {activeOrder && (
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-sm space-y-8 animate-in fade-in duration-300">
-          {/* Order Header Meta */}
-          <div className="flex flex-wrap items-center justify-between pb-6 border-b border-slate-100 gap-4">
-            <div>
-              <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider block">
-                Order Tracking
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
-                {activeOrder.id}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Carrier: NexaExpress Priority · Tracking ID:{" "}
-                <strong className="font-mono text-slate-800">
-                  {activeOrder.trackingId || "Assigned Upon Dispatch"}
-                </strong>
-              </p>
-            </div>
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* Live Interactive Delivery Tracker with Animated Road & Vehicle */}
+          <LiveDeliveryTracker order={activeOrder} />
 
-            <div className="text-right">
-              <span className="text-xs text-slate-400 block font-semibold">
-                Estimated Delivery
-              </span>
-              <span className="text-base font-black text-slate-900 flex items-center gap-1.5 justify-end">
-                <Calendar className="w-4 h-4 text-indigo-600" />
-                {activeOrder.estimatedDelivery
-                  ? new Date(activeOrder.estimatedDelivery).toLocaleDateString(
-                      "en-US",
-                      { weekday: "short", month: "short", day: "numeric" },
-                    )
-                  : "Within 3-5 days"}
-              </span>
-            </div>
-          </div>
-
-          {/* Timeline Milestones */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Shipment Progress
-            </h3>
-
-            <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-2.5 sm:before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-              {timeline.map((step, idx) => (
-                <div key={idx} className="relative flex items-start gap-4">
-                  {/* Step Dot */}
-                  <div
-                    className={`absolute -left-6 sm:-left-8 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-white ${
-                      step.done
-                        ? "bg-emerald-500 ring-4 ring-emerald-100"
-                        : "bg-slate-300"
-                    }`}
-                  >
-                    {step.done ? (
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    ) : (
-                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                    )}
-                  </div>
-
-                  {/* Step Details */}
-                  <div className="space-y-0.5 flex-1">
-                    <span
-                      className={`text-sm font-bold block ${
-                        step.done ? "text-slate-900" : "text-slate-400"
-                      }`}
-                    >
-                      {step.label}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {step.done
-                        ? new Date(step.time).toLocaleString("en-US", {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
-                        : "Pending stage"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Order Summary & Destination Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-slate-100">
-            <div className="p-4 rounded-2xl bg-slate-50 space-y-1 text-xs">
-              <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">
-                Destination Address
-              </span>
-              <p className="font-bold text-slate-900 text-sm">
-                {activeOrder.shippingAddress?.fullName || "Recipient"}
-              </p>
-              <p className="text-slate-600">
-                {activeOrder.shippingAddress?.address},{" "}
-                {activeOrder.shippingAddress?.city},{" "}
-                {activeOrder.shippingAddress?.state}{" "}
-                {activeOrder.shippingAddress?.pincode}
-              </p>
-              <p className="text-slate-500 font-mono mt-1">
-                Phone: {activeOrder.shippingAddress?.phone}
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 space-y-2 text-xs">
-              <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">
-                Package Contents ({activeOrder.items?.length || 1} items)
-              </span>
-              <div className="space-y-1.5 max-h-24 overflow-y-auto">
-                {(activeOrder.items || []).map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center text-xs"
-                  >
-                    <span className="truncate text-slate-800">
-                      {item.quantity}x {item.title}
-                    </span>
-                    <span className="font-bold text-slate-900 shrink-0">
-                      {formatCurrency(item.price * item.quantity)}
-                    </span>
-                  </div>
-                ))}
+          {/* Consignment Address & Package Details */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-100 gap-4">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider block">
+                  Consignment Summary
+                </span>
+                <h3 className="text-lg font-black text-slate-900 font-mono">
+                  {activeOrder.id}
+                </h3>
               </div>
-              <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-slate-900">
-                <span>Total Amount</span>
-                <span className="text-indigo-600 font-black">
-                  {formatCurrency(activeOrder.total)}
+              <div className="text-right">
+                <span className="text-xs text-slate-400 block font-semibold">
+                  Estimated Delivery Date
+                </span>
+                <span className="text-sm font-black text-slate-900 flex items-center gap-1.5 justify-end">
+                  <Calendar className="w-4 h-4 text-indigo-600" />
+                  {activeOrder.estimatedDelivery
+                    ? new Date(activeOrder.estimatedDelivery).toLocaleDateString(
+                        "en-US",
+                        { weekday: "short", month: "short", day: "numeric" },
+                      )
+                    : "Within 3-5 days"}
                 </span>
               </div>
             </div>
-          </div>
 
-          <div className="flex justify-end pt-2">
-            <Link href="/account/orders">
-              <Button variant="outline" size="sm" icon={ArrowRight}>
-                View in Order History
-              </Button>
-            </Link>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-slate-50 space-y-1 text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">
+                  Destination Address
+                </span>
+                <p className="font-bold text-slate-900 text-sm">
+                  {activeOrder.shippingAddress?.fullName || "Recipient"}
+                </p>
+                <p className="text-slate-600">
+                  {activeOrder.shippingAddress?.address},{" "}
+                  {activeOrder.shippingAddress?.city},{" "}
+                  {activeOrder.shippingAddress?.state}{" "}
+                  {activeOrder.shippingAddress?.pincode}
+                </p>
+                <p className="text-slate-500 font-mono mt-1">
+                  Phone: {activeOrder.shippingAddress?.phone}
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 space-y-2 text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">
+                  Package Contents ({activeOrder.items?.length || 1} items)
+                </span>
+                <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                  {(activeOrder.items || []).map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center text-xs"
+                    >
+                      <span className="truncate text-slate-800">
+                        {item.quantity}x {item.title}
+                      </span>
+                      <span className="font-bold text-slate-900 shrink-0">
+                        {formatCurrency(item.price * item.quantity)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-slate-900">
+                  <span>Total Amount</span>
+                  <span className="text-indigo-600 font-black">
+                    {formatCurrency(activeOrder.total)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Link href="/account/orders">
+                <Button variant="outline" size="sm" icon={ArrowRight}>
+                  View in Order History
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       )}

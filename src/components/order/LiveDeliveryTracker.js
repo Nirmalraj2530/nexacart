@@ -111,7 +111,10 @@ export function LiveDeliveryTracker({ order, onStatusChange }) {
   const isDelivered = currentStageIndex === STAGE_CONFIG.length - 1;
 
   // Base timestamps generator for milestones
-  const baseTime = useMemo(() => new Date(order?.createdAt || Date.now() - 3 * 86400000), [order?.createdAt]);
+  const baseTime = useMemo(
+    () => new Date(order?.createdAt || "2026-10-10T12:00:00.000Z"),
+    [order?.createdAt]
+  );
 
   const handleCopyTracking = () => {
     const code = order?.trackingId || "TRK-SF-88421";
