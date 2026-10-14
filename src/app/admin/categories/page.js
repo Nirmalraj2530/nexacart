@@ -98,7 +98,7 @@ export default function AdminCategoriesPage() {
             <FolderTree style={{ color: "var(--color-primary)" }} /> Category Management
           </h1>
           <p style={{ fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-            View, create (POST /categories), edit (PUT /categories/id), and delete (DELETE /categories/id) categories
+            View, create, edit, and organize product categories.
           </p>
         </div>
         <Button variant="primary" icon={Plus} onClick={handleOpenCreate}>
@@ -175,7 +175,7 @@ export default function AdminCategoriesPage() {
           />
 
           <ImageUpload
-            label="Category Image (POST /files/upload)"
+            label="Category Image"
             value={categoryImage}
             onChange={setCategoryImage}
           />

@@ -68,7 +68,7 @@ export function ProductForm({ initialValues, onSubmit, isLoading, isEdit = false
             {isEdit ? "Edit Product Details" : "Create New Product"}
           </h2>
           <p style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-            Fill out product metadata and upload image asset (POST /files/upload)
+            Fill out product metadata, pricing, category, and upload media assets.
           </p>
         </div>
         <Link href="/admin/products">
@@ -109,7 +109,7 @@ export function ProductForm({ initialValues, onSubmit, isLoading, isEdit = false
         </div>
 
         <ImageUpload
-          label="Product Image Asset (POST /files/upload)"
+          label="Product Image"
           value={imageUrl}
           onChange={setImageUrl}
         />

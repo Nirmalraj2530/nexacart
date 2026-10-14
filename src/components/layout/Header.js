@@ -207,17 +207,19 @@ export function Header() {
                       <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 700, lineHeight: 1.2 }}>
                         {authUser?.name || "Account"}
                       </span>
-                      <span
-                        style={{
-                          fontSize: "0.625rem",
-                          fontWeight: 800,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          color: role === "Admin" ? "#4f46e5" : role === "Manager" ? "#9333ea" : "#059669",
-                        }}
-                      >
-                        {role}
-                      </span>
+                      {(role === "Admin" || role === "Manager") && (
+                        <span
+                          style={{
+                            fontSize: "0.625rem",
+                            fontWeight: 800,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            color: role === "Admin" ? "#4f46e5" : "#9333ea",
+                          }}
+                        >
+                          {role}
+                        </span>
+                      )}
                     </div>
                   </Link>
                   <button
@@ -416,17 +418,19 @@ export function Header() {
                       <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 700, color: "var(--color-text-main)" }}>
                         {authUser?.name || "Member"}
                       </span>
-                      <span
-                        style={{
-                          fontSize: "0.6875rem",
-                          fontWeight: 800,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          color: role === "Admin" ? "#4f46e5" : role === "Manager" ? "#9333ea" : "#059669",
-                        }}
-                      >
-                        {role}
-                      </span>
+                      {(role === "Admin" || role === "Manager") && (
+                        <span
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 800,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            color: role === "Admin" ? "#4f46e5" : "#9333ea",
+                          }}
+                        >
+                          {role}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -38,7 +38,7 @@ import {
   ShoppingBag,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
+  ChevronDown,
 } from "lucide-react";
 
 // Curated avatar presets for instant selection during registration
@@ -64,12 +64,13 @@ export function LoginModal() {
   const [checkAvailability, { isLoading: isCheckingEmail }] = useCheckUserAvailabilityMutation();
   const [triggerGetProfile] = useLazyGetUserProfileQuery();
 
-  // Login form state
-  const [email, setEmail] = useState("john@mail.com");
-  const [password, setPassword] = useState("changeme");
+  // Login form state (empty by default - no predefined credentials)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [showDemoRoles, setShowDemoRoles] = useState(false);
 
   // Registration form state
   const [regName, setRegName] = useState("");
@@ -117,7 +118,7 @@ export function LoginModal() {
   };
 
   // ----------------------------------------------------
-  // LOGIN SUBMISSION (POST /auth/login & GET /auth/profile)
+  // LOGIN SUBMISSION
   // ----------------------------------------------------
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -125,28 +126,42 @@ export function LoginModal() {
     setEmailError("");
     setPasswordError("");
 
-    const eErr = validateEmail(email);
-    const pErr = validatePassword(password);
-    if (eErr || pErr) {
-      if (eErr) setEmailError(eErr);
-      if (pErr) setPasswordError(pErr);
+    const trimmedEmail = (email || "").trim().toLowerCase();
+    const enteredPassword = password || "";
+
+    if (!trimmedEmail) {
+      setEmailError("Please enter your email address");
+      return;
+    }
+    const eErr = validateEmail(trimmedEmail);
+    if (eErr) {
+      setEmailError(eErr);
+      return;
+    }
+
+    if (!enteredPassword) {
+      setPasswordError("Please enter your password");
+      return;
+    }
+    const pErr = validatePassword(enteredPassword);
+    if (pErr) {
+      setPasswordError(pErr);
       return;
     }
 
     try {
-      const authData = await loginUser({ email, password }).unwrap();
+      const authData = await loginUser({ email: trimmedEmail, password: enteredPassword }).unwrap();
       if (authData.access_token) {
         dispatch(setCredentials({ access_token: authData.access_token }));
 
-        // Fetch authentic user profile from backend API (/auth/profile)
         let userProfile = null;
         try {
           userProfile = await triggerGetProfile().unwrap();
           dispatch(setCredentials({ access_token: authData.access_token, user: userProfile }));
         } catch {
           userProfile = {
-            name: email.split("@")[0],
-            email,
+            name: trimmedEmail.split("@")[0],
+            email: trimmedEmail,
             role: "customer",
           };
           dispatch(setCredentials({ access_token: authData.access_token, user: userProfile }));
@@ -173,15 +188,15 @@ export function LoginModal() {
       }
     } catch (err) {
       // Demo accounts for evaluation and test scenarios
-      if (email === "admin@nexacart.com" || email === "admin@mail.com") {
+      if (trimmedEmail === "admin@nexacart.com" || trimmedEmail === "admin@mail.com") {
         loginAsRole("Admin");
         dispatch(closeLoginModal());
         router.push("/admin");
-      } else if (email === "manager@nexacart.com" || email === "manager@mail.com") {
+      } else if (trimmedEmail === "manager@nexacart.com" || trimmedEmail === "manager@mail.com") {
         loginAsRole("Manager");
         dispatch(closeLoginModal());
         router.push("/admin");
-      } else if (email === "john@mail.com" && password === "changeme") {
+      } else if (trimmedEmail === "john@mail.com" && enteredPassword === "changeme") {
         loginAsRole("Customer");
         handlePendingCartAdd();
         dispatch(closeLoginModal());
@@ -189,43 +204,54 @@ export function LoginModal() {
           router.push("/");
         }
       } else {
-        setLoginError(
-          err?.data?.message ||
-            "Invalid credentials. Try john@mail.com / changeme or one of the Demo Quick Access roles below."
-        );
+        const status = err?.status;
+        const msg = String(err?.data?.message || "");
+
+        if (status === 401 || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("not found")) {
+          setLoginError(
+            "No account found with this email, or the password is incorrect. If you haven't created an account yet, please register below."
+          );
+        } else if (err?.data?.message) {
+          setLoginError(Array.isArray(err.data.message) ? err.data.message.join(", ") : err.data.message);
+        } else {
+          setLoginError("Invalid email or password. Please verify your credentials or create a new account.");
+        }
       }
     }
   };
 
   // ----------------------------------------------------
-  // CHECK EMAIL AVAILABILITY (POST /users/is-available)
+  // CHECK EMAIL AVAILABILITY
   // ----------------------------------------------------
   const handleCheckEmailAvailability = async () => {
-    if (!regEmail || !regEmail.trim()) {
-      setRegEmailError("Please enter an email address to check availability");
+    const trimmed = (regEmail || "").trim().toLowerCase();
+    if (!trimmed) {
+      setRegEmailError("Please enter an email address to verify");
       return;
     }
-    const eErr = validateEmail(regEmail);
+    const eErr = validateEmail(trimmed);
     if (eErr) {
       setRegEmailError(eErr);
       return;
     }
 
     try {
-      const res = await checkAvailability({ email: regEmail.trim() }).unwrap();
+      const res = await checkAvailability({ email: trimmed }).unwrap();
       if (res.isAvailable) {
-        setEmailAvailabilityMsg({ isAvailable: true, text: "✓ Email is available for registration!" });
+        setEmailAvailabilityMsg({ isAvailable: true, text: "✓ Email is available for registration" });
       } else {
-        setEmailAvailabilityMsg({ isAvailable: false, text: "✕ Email is already in use. Please sign in or use another." });
+        setEmailAvailabilityMsg({
+          isAvailable: false,
+          text: "✕ This email is already registered. Please sign in instead.",
+        });
       }
     } catch {
-      // In case check endpoint is constrained, perform client validation
-      setEmailAvailabilityMsg({ isAvailable: true, text: "✓ Email format is valid for signup" });
+      setEmailAvailabilityMsg({ isAvailable: true, text: "✓ Email format is valid for registration" });
     }
   };
 
   // ----------------------------------------------------
-  // REGISTRATION SUBMISSION (POST /users)
+  // REGISTRATION SUBMISSION
   // ----------------------------------------------------
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
@@ -234,10 +260,13 @@ export function LoginModal() {
     setRegEmailError("");
     setRegPasswordError("");
 
-    // Form field validation
-    const nErr = validateUserName(regName);
-    const eErr = validateEmail(regEmail);
-    const pErr = validatePassword(regPassword);
+    const trimmedName = (regName || "").trim();
+    const trimmedEmail = (regEmail || "").trim().toLowerCase();
+    const enteredPassword = regPassword || "";
+
+    const nErr = validateUserName(trimmedName);
+    const eErr = validateEmail(trimmedEmail);
+    const pErr = validatePassword(enteredPassword);
 
     if (nErr || eErr || pErr) {
       if (nErr) setNameError(nErr);
@@ -247,15 +276,14 @@ export function LoginModal() {
     }
 
     const payload = {
-      name: regName.trim(),
-      email: regEmail.trim().toLowerCase(),
-      password: regPassword,
+      name: trimmedName,
+      email: trimmedEmail,
+      password: enteredPassword,
       avatar: regAvatar || AVATAR_PRESETS[0].url,
       role: "customer",
     };
 
     try {
-      // POST /users API call
       const createdUser = await registerUser(payload).unwrap();
 
       dispatch(
@@ -265,18 +293,16 @@ export function LoginModal() {
         })
       );
 
-      // Attempt automatic sign-in with newly registered credentials
+      // Automatically sign in the newly registered customer
       try {
         const authData = await loginUser({ email: payload.email, password: payload.password }).unwrap();
         if (authData.access_token) {
           dispatch(setCredentials({ access_token: authData.access_token, user: createdUser }));
         } else {
-          // Direct session login using created user object
-          const token = `token_reg_${createdUser.id}_${Date.now()}`;
+          const token = `token_reg_${createdUser.id || Date.now()}`;
           dispatch(setCredentials({ access_token: token, user: createdUser }));
         }
       } catch {
-        // Fallback: Establish valid user session with created user profile
         const token = `token_reg_${createdUser.id || Date.now()}`;
         dispatch(setCredentials({ access_token: token, user: createdUser }));
       }
@@ -284,10 +310,21 @@ export function LoginModal() {
       handlePendingCartAdd();
       dispatch(closeLoginModal());
     } catch (err) {
-      const apiMsg = Array.isArray(err?.data?.message)
+      const rawMsg = Array.isArray(err?.data?.message)
         ? err.data.message.join(", ")
-        : err?.data?.message || err?.message || "Registration failed. Please check your details and try again.";
-      setRegError(apiMsg);
+        : err?.data?.message || err?.message || "";
+
+      if (
+        rawMsg.toLowerCase().includes("unique") ||
+        rawMsg.toLowerCase().includes("already") ||
+        rawMsg.toLowerCase().includes("exist")
+      ) {
+        setRegError("An account with this email already exists. Please sign in instead.");
+      } else if (rawMsg) {
+        setRegError(rawMsg);
+      } else {
+        setRegError("Registration could not be completed. Please check your information and try again.");
+      }
     }
   };
 
@@ -308,10 +345,11 @@ export function LoginModal() {
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={activeTab === "register" ? "Create Your Account" : "User Sign In"}
+      title={activeTab === "register" ? "Create Your Account" : "Sign In to NexaCart"}
+      maxWidth={activeTab === "register" ? "38rem" : "32rem"}
     >
-      {/* Tab Switcher */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-4 border border-slate-200 dark:border-slate-700">
+      {/* Modern Tabs */}
+      <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-5 border border-slate-200 dark:border-slate-700">
         <button
           type="button"
           onClick={() => handleTabSwitch("login")}
@@ -344,7 +382,7 @@ export function LoginModal() {
       )}
 
       {/* ==================================================== */}
-      {/* SIGN IN FORM (POST /auth/login)                      */}
+      {/* SIGN IN FORM                                         */}
       {/* ==================================================== */}
       {activeTab === "login" ? (
         <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -353,9 +391,20 @@ export function LoginModal() {
           </p>
 
           {loginError && (
-            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-lg)", backgroundColor: "var(--color-danger-light)", color: "var(--color-danger)", fontSize: "var(--font-size-xs)", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{loginError}</span>
+            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-lg)", backgroundColor: "var(--color-danger-light)", color: "var(--color-danger)", fontSize: "var(--font-size-xs)", fontWeight: 600, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{loginError}</span>
+              </div>
+              {loginError.includes("create an account") && (
+                <button
+                  type="button"
+                  onClick={() => handleTabSwitch("register")}
+                  className="self-start text-xs font-bold underline hover:opacity-80 transition-opacity"
+                >
+                  Create an Account Now →
+                </button>
+              )}
             </div>
           )}
 
@@ -363,11 +412,12 @@ export function LoginModal() {
             label="Email Address"
             type="email"
             icon={Mail}
-            placeholder="john@mail.com"
+            placeholder="name@example.com"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
               setEmailError("");
+              setLoginError("");
             }}
             error={emailError}
             required
@@ -377,49 +427,16 @@ export function LoginModal() {
             label="Password"
             type="password"
             icon={Lock}
-            placeholder="••••••••"
+            placeholder="Enter your password"
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
               setPasswordError("");
+              setLoginError("");
             }}
             error={passwordError}
             required
           />
-
-          {/* Quick Demo Role Selector */}
-          <div style={{ padding: "0.875rem", backgroundColor: "var(--color-bg)", borderRadius: "var(--radius-xl)", border: "1px solid var(--color-border)" }}>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-text-main)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
-              <Shield style={{ width: "0.875rem", height: "0.875rem", color: "var(--color-primary)" }} />
-              Quick Access Demo Roles:
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickRoleSelect("Admin")}
-                className="btn btn-outline btn-sm w-full"
-                style={{ fontSize: "0.75rem", justifyContent: "center", minHeight: "2.5rem" }}
-              >
-                <UserCheck style={{ width: "0.875rem", height: "0.875rem" }} /> Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickRoleSelect("Manager")}
-                className="btn btn-outline btn-sm w-full"
-                style={{ fontSize: "0.75rem", justifyContent: "center", minHeight: "2.5rem" }}
-              >
-                <User style={{ width: "0.875rem", height: "0.875rem" }} /> Manager
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickRoleSelect("Customer")}
-                className="btn btn-outline btn-sm w-full"
-                style={{ fontSize: "0.75rem", justifyContent: "center", minHeight: "2.5rem" }}
-              >
-                <User style={{ width: "0.875rem", height: "0.875rem" }} /> Customer
-              </button>
-            </div>
-          </div>
 
           <div style={{ paddingTop: "0.25rem" }}>
             <Button
@@ -433,7 +450,7 @@ export function LoginModal() {
             </Button>
           </div>
 
-          <div className="text-center pt-2">
+          <div className="text-center pt-1">
             <button
               type="button"
               onClick={() => handleTabSwitch("register")}
@@ -442,37 +459,116 @@ export function LoginModal() {
               Don&apos;t have an account? Create one now →
             </button>
           </div>
+
+          {/* Discreet Collapsible Demo Accounts (For Testing & Reviewers) */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setShowDemoRoles(!showDemoRoles)}
+              className="w-full flex items-center justify-between py-1.5 px-3 rounded-lg text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Quick Demo Accounts (Click to test roles)</span>
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDemoRoles ? "rotate-180" : ""}`} />
+            </button>
+
+            {showDemoRoles && (
+              <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+                  Select a test profile to simulate permissions without typing:
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickRoleSelect("Admin")}
+                    className="btn btn-outline btn-sm text-xs justify-center"
+                    style={{ minHeight: "2.25rem" }}
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" /> Admin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickRoleSelect("Manager")}
+                    className="btn btn-outline btn-sm text-xs justify-center"
+                    style={{ minHeight: "2.25rem" }}
+                  >
+                    <User className="w-3.5 h-3.5 text-purple-600" /> Manager
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickRoleSelect("Customer")}
+                    className="btn btn-outline btn-sm text-xs justify-center"
+                    style={{ minHeight: "2.25rem" }}
+                  >
+                    <User className="w-3.5 h-3.5 text-emerald-600" /> Customer
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </form>
       ) : (
         /* ==================================================== */
-        /* USER REGISTRATION FORM (POST /users)                 */
+        /* USER REGISTRATION FORM                               */
         /* ==================================================== */
         <form onSubmit={handleRegisterSubmit} className="space-y-4">
           <p style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)" }}>
-            Register a new NexaCart shopper account (POST /users API integration).
+            Create your NexaCart shopper account to enjoy fast checkout, order tracking, and exclusive discounts.
           </p>
 
           {regError && (
-            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-lg)", backgroundColor: "var(--color-danger-light)", color: "var(--color-danger)", fontSize: "var(--font-size-xs)", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{regError}</span>
+            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-lg)", backgroundColor: "var(--color-danger-light)", color: "var(--color-danger)", fontSize: "var(--font-size-xs)", fontWeight: 600, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{regError}</span>
+              </div>
+              {regError.includes("already exists") && (
+                <button
+                  type="button"
+                  onClick={() => handleTabSwitch("login")}
+                  className="self-start text-xs font-bold underline hover:opacity-80 transition-opacity"
+                >
+                  Sign in to this account →
+                </button>
+              )}
             </div>
           )}
 
-          {/* Full Name */}
-          <Input
-            label="Full Name"
-            type="text"
-            icon={User}
-            placeholder="Johnathan Doe"
-            value={regName}
-            onChange={(e) => {
-              setRegName(e.target.value);
-              setNameError("");
-            }}
-            error={nameError}
-            required
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Full Name */}
+            <Input
+              label="Full Name"
+              type="text"
+              icon={User}
+              placeholder="e.g. Rahul Sharma"
+              value={regName}
+              onChange={(e) => {
+                setRegName(e.target.value);
+                setNameError("");
+                setRegError("");
+              }}
+              error={nameError}
+              required
+            />
+
+            {/* Password */}
+            <Input
+              label="Password"
+              type="password"
+              icon={Lock}
+              placeholder="Min. 6 characters"
+              value={regPassword}
+              onChange={(e) => {
+                setRegPassword(e.target.value);
+                setRegPasswordError("");
+                setRegError("");
+              }}
+              error={regPasswordError}
+              required
+            />
+          </div>
 
           {/* Email Address with live check */}
           <div>
@@ -480,11 +576,12 @@ export function LoginModal() {
               label="Email Address"
               type="email"
               icon={Mail}
-              placeholder="newuser@example.com"
+              placeholder="yourname@example.com"
               value={regEmail}
               onChange={(e) => {
                 setRegEmail(e.target.value);
                 setRegEmailError("");
+                setRegError("");
                 setEmailAvailabilityMsg(null);
               }}
               error={regEmailError}
@@ -497,7 +594,7 @@ export function LoginModal() {
                 disabled={isCheckingEmail || !regEmail}
                 className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline disabled:opacity-50"
               >
-                {isCheckingEmail ? "Checking availability..." : "Check email availability (POST /users/is-available)"}
+                {isCheckingEmail ? "Checking..." : "Verify email availability"}
               </button>
               {emailAvailabilityMsg && (
                 <span className={`font-semibold flex items-center gap-1 ${emailAvailabilityMsg.isAvailable ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
@@ -508,26 +605,11 @@ export function LoginModal() {
             </div>
           </div>
 
-          {/* Password */}
-          <Input
-            label="Password"
-            type="password"
-            icon={Lock}
-            placeholder="Min. 6 characters"
-            value={regPassword}
-            onChange={(e) => {
-              setRegPassword(e.target.value);
-              setRegPasswordError("");
-            }}
-            error={regPasswordError}
-            required
-          />
-
           {/* Avatar Preset Selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
               <span>Choose Profile Avatar</span>
-              <span className="text-[11px] text-slate-400 font-normal">Included in POST /users</span>
+              <span className="text-[11px] text-slate-400 font-normal">Select an avatar</span>
             </label>
             <div className="grid grid-cols-4 gap-2">
               {AVATAR_PRESETS.map((preset) => (
@@ -535,7 +617,7 @@ export function LoginModal() {
                   key={preset.id}
                   type="button"
                   onClick={() => setRegAvatar(preset.url)}
-                  className={`relative p-1 rounded-xl border transition-all text-center flex flex-col items-center gap-1 ${
+                  className={`relative p-1.5 rounded-xl border transition-all text-center flex flex-col items-center gap-1.5 ${
                     regAvatar === preset.url
                       ? "border-indigo-600 ring-2 ring-indigo-500/20 bg-indigo-50/50 dark:bg-indigo-950/30"
                       : "border-slate-200 dark:border-slate-700 hover:border-slate-300"
@@ -544,7 +626,7 @@ export function LoginModal() {
                   <img
                     src={preset.url}
                     alt={preset.label}
-                    className="w-10 h-10 rounded-full object-cover shadow-xs"
+                    className="w-11 h-11 rounded-full object-cover shadow-xs"
                   />
                   <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">
                     {preset.label}
@@ -562,11 +644,11 @@ export function LoginModal() {
               isLoading={isRegistering}
               icon={UserPlus}
             >
-              Register & Sign In
+              Create Account & Sign In
             </Button>
           </div>
 
-          <div className="text-center pt-2">
+          <div className="text-center pt-1">
             <button
               type="button"
               onClick={() => handleTabSwitch("login")}

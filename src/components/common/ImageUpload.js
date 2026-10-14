@@ -101,7 +101,7 @@ export function ImageUpload({ value, onChange, label = "Product Image" }) {
               {isUploading ? "Uploading image to API..." : "Click or drag & drop image to upload"}
             </p>
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-light)" }}>
-              Supports JPG, PNG, WEBP (POST /files/upload)
+              Supports JPG, PNG, WEBP
             </span>
           </div>
         </div>

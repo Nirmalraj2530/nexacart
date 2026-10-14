@@ -127,7 +127,7 @@ export default function AdminUsersPage() {
             <Users style={{ color: "var(--color-primary)" }} /> User Management
           </h1>
           <p style={{ fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-            Manage store members, user roles, email availability (POST /users/is-available), and user accounts
+            Manage store members, user permissions, and customer accounts.
           </p>
         </div>
         <Button variant="primary" icon={Plus} onClick={handleOpenCreate}>
@@ -230,7 +230,7 @@ export default function AdminUsersPage() {
                 onClick={handleCheckEmail}
                 style={{ fontSize: "0.75rem", color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, padding: 0 }}
               >
-                Check Email Availability (POST /users/is-available)
+                Verify Email Availability
               </button>
               {availabilityStatus && (
                 <span style={{ fontSize: "0.75rem", fontWeight: 700, color: availabilityStatus.includes("available") ? "var(--color-success)" : "var(--color-danger)" }}>

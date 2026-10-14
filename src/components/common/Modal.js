@@ -8,6 +8,7 @@ export function Modal({
   onClose,
   title,
   children,
+  maxWidth,
 }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -27,7 +28,11 @@ export function Modal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-container"
+        style={maxWidth ? { maxWidth } : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         {title && (
           <div className="modal-header">
             <h3 className="modal-title">{title}</h3>

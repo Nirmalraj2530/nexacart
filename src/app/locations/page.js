@@ -13,7 +13,7 @@ export default function LocationsPage() {
     <div className="header-container" style={{ paddingTop: "3rem", paddingBottom: "4rem" }}>
       <div style={{ textAlign: "center", maxWidth: "36rem", margin: "0 auto 3rem" }}>
         <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-primary)" }}>
-          Store Finder (GET /locations)
+          Store Finder
         </span>
         <h1 style={{ fontSize: "clamp(1.75rem, 5vw, 2.25rem)", fontWeight: 900, color: "var(--color-text-main)", margin: "0.5rem 0 0.75rem", letterSpacing: "-0.025em" }}>
           Our Physical Locations & Pickup Hubs
