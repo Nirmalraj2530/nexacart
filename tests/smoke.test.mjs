@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { formatCurrency, isDummyPlaceholder, truncateText } from "../src/utils/formatters.js";
 import { validateUserName, validateUserForm, validateEmail, validatePassword } from "../src/utils/validators.js";
+import { HTTP_STATUS, getHttpStatusDetails } from "../src/utils/httpErrors.js";
 import nextConfig from "../next.config.mjs";
 
 describe("NexaCart Project Sanity & Smoke Suite", () => {
@@ -105,6 +106,57 @@ describe("NexaCart Project Sanity & Smoke Suite", () => {
       assert.ok(invalid.errors.name);
       assert.ok(invalid.errors.email);
       assert.ok(invalid.errors.password);
+    });
+  });
+
+  describe("HTTP Status Code Handling Tests", () => {
+    it("handles 200 OK (Success)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.OK);
+      assert.equal(details.code, 200);
+      assert.equal(details.category, "success");
+      assert.match(details.title, /Successful/i);
+    });
+
+    it("handles 201 Created (Success)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.CREATED);
+      assert.equal(details.code, 201);
+      assert.equal(details.category, "success");
+      assert.match(details.title, /Created/i);
+    });
+
+    it("handles 400 Bad Request (Client Error)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.BAD_REQUEST);
+      assert.equal(details.code, 400);
+      assert.equal(details.category, "client_error");
+      assert.match(details.title, /400/);
+    });
+
+    it("handles 401 Unauthorized (Auth Error)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.UNAUTHORIZED);
+      assert.equal(details.code, 401);
+      assert.equal(details.category, "auth_error");
+      assert.match(details.title, /401/);
+    });
+
+    it("handles 403 Forbidden (Permission Error)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.FORBIDDEN);
+      assert.equal(details.code, 403);
+      assert.equal(details.category, "permission_error");
+      assert.match(details.title, /403/);
+    });
+
+    it("handles 404 Not Found (Client Error)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.NOT_FOUND);
+      assert.equal(details.code, 404);
+      assert.equal(details.category, "client_error");
+      assert.match(details.title, /404/);
+    });
+
+    it("handles 500 Internal Server Error (Server Error)", () => {
+      const details = getHttpStatusDetails(HTTP_STATUS.INTERNAL_SERVER_ERROR);
+      assert.equal(details.code, 500);
+      assert.equal(details.category, "server_error");
+      assert.match(details.title, /500/);
     });
   });
 });

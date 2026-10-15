@@ -1,21 +1,43 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { getHttpStatusDetails } from "@/utils/httpErrors";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.escuelajs.co/api/v1";
 
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl,
+  prepareHeaders: (headers) => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("nexacart_access_token");
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+    }
+    return headers;
+  },
+});
+
+const baseQueryWithStatusHandling = async (args, api, extraOptions) => {
+  const result = await rawBaseQuery(args, api, extraOptions);
+
+  if (result.error) {
+    const statusCode = result.error.status;
+    let rawMessage = result.error.data?.message;
+    if (Array.isArray(rawMessage)) {
+      rawMessage = rawMessage.join(", ");
+    }
+    const details = getHttpStatusDetails(statusCode, rawMessage);
+    result.error.statusCode = details.code;
+    result.error.statusName = details.name;
+    result.error.statusTitle = details.title;
+    result.error.friendlyMessage = details.message;
+  }
+
+  return result;
+};
+
 export const productApi = createApi({
   reducerPath: "productApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl,
-    prepareHeaders: (headers) => {
-      if (typeof window !== "undefined") {
-        const token = localStorage.getItem("nexacart_access_token");
-        if (token) {
-          headers.set("Authorization", `Bearer ${token}`);
-        }
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithStatusHandling,
   tagTypes: ["Products", "Product", "Categories", "Category", "Users", "User", "Auth", "Locations"],
   endpoints: (builder) => ({
     // ==========================================
