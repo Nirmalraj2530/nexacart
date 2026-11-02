@@ -81,7 +81,6 @@ export function LoginModal() {
   const [nameError, setNameError] = useState("");
   const [regEmailError, setRegEmailError] = useState("");
   const [regPasswordError, setRegPasswordError] = useState("");
-  const [emailAvailabilityMsg, setEmailAvailabilityMsg] = useState(null);
 
   const resetErrors = () => {
     setLoginError("");
@@ -91,7 +90,6 @@ export function LoginModal() {
     setNameError("");
     setRegEmailError("");
     setRegPasswordError("");
-    setEmailAvailabilityMsg(null);
   };
 
   const handleTabSwitch = (tab) => {
@@ -221,37 +219,7 @@ export function LoginModal() {
   };
 
   // ----------------------------------------------------
-  // CHECK EMAIL AVAILABILITY
-  // ----------------------------------------------------
-  const handleCheckEmailAvailability = async () => {
-    const trimmed = (regEmail || "").trim().toLowerCase();
-    if (!trimmed) {
-      setRegEmailError("Please enter an email address to verify");
-      return;
-    }
-    const eErr = validateEmail(trimmed);
-    if (eErr) {
-      setRegEmailError(eErr);
-      return;
-    }
-
-    try {
-      const res = await checkAvailability({ email: trimmed }).unwrap();
-      if (res.isAvailable) {
-        setEmailAvailabilityMsg({ isAvailable: true, text: "✓ Email is available for registration" });
-      } else {
-        setEmailAvailabilityMsg({
-          isAvailable: false,
-          text: "✕ This email is already registered. Please sign in instead.",
-        });
-      }
-    } catch {
-      setEmailAvailabilityMsg({ isAvailable: true, text: "✓ Email format is valid for registration" });
-    }
-  };
-
-  // ----------------------------------------------------
-  // REGISTRATION SUBMISSION
+  // REGISTRATION SUBMISSION (Automatic availability check on submit)
   // ----------------------------------------------------
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
@@ -275,6 +243,21 @@ export function LoginModal() {
       return;
     }
 
+    // Automatically check availability as part of the submission flow
+    try {
+      console.log("[LoginModal] Verifying email availability during registration:", trimmedEmail);
+      const availRes = await checkAvailability({ email: trimmedEmail }).unwrap();
+      console.log("[LoginModal] Availability verification result:", availRes);
+
+      if (availRes && availRes.isAvailable === false) {
+        setRegEmailError("✕ This email is already registered. Please sign in instead.");
+        setRegError("An account with this email already exists. Please sign in instead.");
+        return;
+      }
+    } catch (checkErr) {
+      console.warn("[LoginModal] Availability check bypassed on error:", checkErr);
+    }
+
     const payload = {
       name: trimmedName,
       email: trimmedEmail,
@@ -283,8 +266,11 @@ export function LoginModal() {
       role: "customer",
     };
 
+    console.log("[LoginModal] Submitting user registration:", { ...payload, password: "***" });
+
     try {
       const createdUser = await registerUser(payload).unwrap();
+      console.log("[LoginModal] Registration completed successfully:", createdUser);
 
       dispatch(
         addToast({
@@ -310,6 +296,7 @@ export function LoginModal() {
       handlePendingCartAdd();
       dispatch(closeLoginModal());
     } catch (err) {
+      console.error("[LoginModal] Registration failed:", err);
       const rawMsg = Array.isArray(err?.data?.message)
         ? err.data.message.join(", ")
         : err?.data?.message || err?.message || "";
@@ -319,6 +306,7 @@ export function LoginModal() {
         rawMsg.toLowerCase().includes("already") ||
         rawMsg.toLowerCase().includes("exist")
       ) {
+        setRegEmailError("✕ This email is already registered. Please sign in instead.");
         setRegError("An account with this email already exists. Please sign in instead.");
       } else if (rawMsg) {
         setRegError(rawMsg);
@@ -570,7 +558,7 @@ export function LoginModal() {
             />
           </div>
 
-          {/* Email Address with live check */}
+          {/* Email Address */}
           <div>
             <Input
               label="Email Address"
@@ -582,27 +570,10 @@ export function LoginModal() {
                 setRegEmail(e.target.value);
                 setRegEmailError("");
                 setRegError("");
-                setEmailAvailabilityMsg(null);
               }}
               error={regEmailError}
               required
             />
-            <div className="flex items-center justify-between mt-1 text-xs">
-              <button
-                type="button"
-                onClick={handleCheckEmailAvailability}
-                disabled={isCheckingEmail || !regEmail}
-                className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline disabled:opacity-50"
-              >
-                {isCheckingEmail ? "Checking..." : "Verify email availability"}
-              </button>
-              {emailAvailabilityMsg && (
-                <span className={`font-semibold flex items-center gap-1 ${emailAvailabilityMsg.isAvailable ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                  {emailAvailabilityMsg.isAvailable ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                  {emailAvailabilityMsg.text}
-                </span>
-              )}
-            </div>
           </div>
 
           {/* Avatar Preset Selector */}
@@ -641,7 +612,7 @@ export function LoginModal() {
               type="submit"
               variant="primary"
               fullWidth
-              isLoading={isRegistering}
+              isLoading={isRegistering || isCheckingEmail}
               icon={UserPlus}
             >
               Create Account & Sign In

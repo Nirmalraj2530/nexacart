@@ -68,13 +68,16 @@ export default function AdminUsersPage() {
   const handleCheckEmail = async () => {
     if (!formData.email) return;
     try {
+      console.log("[AdminUsers] Checking email availability for:", formData.email);
       const res = await checkAvailability({ email: formData.email }).unwrap();
-      if (res.isAvailable) {
+      console.log("[AdminUsers] Check result:", res);
+      if (res?.isAvailable) {
         setAvailabilityStatus("Email is available!");
       } else {
         setAvailabilityStatus("Email is already taken.");
       }
-    } catch {
+    } catch (err) {
+      console.warn("[AdminUsers] Failed to check email availability:", err);
       setAvailabilityStatus("Failed to check email availability.");
     }
   };

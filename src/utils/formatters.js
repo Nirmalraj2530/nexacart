@@ -199,3 +199,62 @@ export function exportProductsToCSV(products, filename = "nexacart_products.csv"
   document.body.removeChild(link);
 }
 
+/**
+ * Sanitizes and cleans category names, stripping junk test suffixes, UUIDs, and unwanted spam.
+ * Returns null if the category is junk/spam/unwanted.
+ */
+export function sanitizeCategory(category) {
+  if (!category || !category.name) return null;
+  let name = String(category.name).trim();
+
+  // Strip long hex/uuid hashes like _8c06d5cc05f42c5b8f18a5012b6f595 or d62b60b994ab...
+  name = name.replace(/_[0-9a-fA-F]{8,}.*$/i, "");
+  name = name.replace(/[0-9a-fA-F]{16,}/gi, "");
+  name = name.trim();
+
+  const lower = name.toLowerCase();
+  // Filter out unwanted / spam / mock testing categories
+  const junkPrefixes = [
+    "test",
+    "string",
+    "new ctg",
+    "new category",
+    "nueva",
+    "paquetes",
+    "category_",
+    "category ",
+    "dummy",
+  ];
+  if (junkPrefixes.some((j) => lower.startsWith(j) || lower === j)) {
+    return null;
+  }
+  if (lower.includes("testcategory") || lower.includes("testing") || lower.includes("random")) {
+    return null;
+  }
+  if (name.length < 3) return null;
+
+  // Clean, professional canonical mapping for primary e-commerce categories
+  const canonicalMap = {
+    1: "Clothes & Fashion",
+    2: "Electronics",
+    3: "Furniture & Living",
+    4: "Shoes & Footwear",
+    5: "Accessories & Misc",
+    11: "Home & Kitchen",
+    32: "Food & Beverages",
+    46: "Electric & Appliances",
+  };
+
+  const cleanName = canonicalMap[category.id] || name;
+  return { ...category, name: cleanName };
+}
+
+/**
+ * Filters and cleans an array of categories.
+ */
+export function sanitizeCategories(categories = []) {
+  if (!Array.isArray(categories)) return [];
+  return categories.map(sanitizeCategory).filter(Boolean);
+}
+
+

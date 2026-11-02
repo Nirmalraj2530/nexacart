@@ -43,8 +43,8 @@ export function PromoOfferModal() {
     // Check if dismissed in current session
     const isDismissed = sessionStorage.getItem("nexacart_promo_dismissed");
 
-    // Only show on storefront, not on admin pages
-    if (!pathname?.startsWith("/admin") && !isDismissed) {
+    // Only show on storefront, not on admin pages or compare page
+    if (!pathname?.startsWith("/admin") && pathname !== "/compare" && !isDismissed) {
       const timer = setTimeout(() => {
         setIsOpen(true);
       }, 2500); // Trigger after 2.5 seconds on page
@@ -104,8 +104,8 @@ export function PromoOfferModal() {
     router.push("/products");
   };
 
-  // Do not show anything on admin routes
-  if (!mounted || pathname?.startsWith("/admin")) {
+  // Do not show on admin routes or compare page where it blocks data table
+  if (!mounted || pathname?.startsWith("/admin") || pathname === "/compare") {
     return null;
   }
 

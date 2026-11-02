@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { formatCurrency, isDummyPlaceholder, truncateText } from "../src/utils/formatters.js";
+import { formatCurrency, isDummyPlaceholder, truncateText, sanitizeCategories } from "../src/utils/formatters.js";
 import { validateUserName, validateUserForm, validateEmail, validatePassword } from "../src/utils/validators.js";
 import { HTTP_STATUS, getHttpStatusDetails } from "../src/utils/httpErrors.js";
 import nextConfig from "../next.config.mjs";
@@ -66,6 +66,24 @@ describe("NexaCart Project Sanity & Smoke Suite", () => {
       assert.ok(truncated.endsWith("..."));
       assert.ok(truncated.length <= 18);
       assert.equal(truncateText("Short", 20), "Short");
+    });
+
+    it("sanitizeCategories removes unwanted junk/test names and formats real categories", () => {
+      const mockRawCategories = [
+        { id: 1, name: "Updated Category Name" },
+        { id: 2, name: "Electronics" },
+        { id: 23, name: "testCategoryd62b60b994ab4840b663a6bcf018d16c" },
+        { id: 25, name: "test Category8f64e8a0a3774ba7ac923feeff37032f" },
+        { id: 32, name: "Food & Beverages_8c06d5cc05f42c5b8f18a5012b6f595" },
+        { id: 43, name: "Nueva categoria" },
+        { id: 9, name: "string" },
+      ];
+
+      const cleaned = sanitizeCategories(mockRawCategories);
+      assert.equal(cleaned.length, 3);
+      assert.equal(cleaned[0].name, "Clothes & Fashion");
+      assert.equal(cleaned[1].name, "Electronics");
+      assert.equal(cleaned[2].name, "Food & Beverages");
     });
   });
 

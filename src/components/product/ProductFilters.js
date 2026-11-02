@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Filter, RotateCcw } from "lucide-react";
+import { sanitizeCategories } from "@/utils/formatters";
 
 export function ProductFilters({
   categories = [],
@@ -12,6 +13,7 @@ export function ProductFilters({
   onPriceChange,
   onReset,
 }) {
+  const cleanCategories = sanitizeCategories(categories);
   return (
     <div className="filter-card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: "0.75rem", borderBottom: "1px solid var(--color-border)" }}>
@@ -39,7 +41,7 @@ export function ProductFilters({
           >
             All Categories
           </button>
-          {categories.map((cat) => {
+          {cleanCategories.map((cat) => {
             const isSelected = String(selectedCategory) === String(cat.id);
             return (
               <button
