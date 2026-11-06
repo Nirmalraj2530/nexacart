@@ -2,7 +2,8 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { getHttpStatusDetails } from "@/utils/httpErrors";
 import { sanitizeCategories } from "@/utils/formatters";
 
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.escuelajs.co/api/v1";
+const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api";
+const authBaseUrl = process.env.NEXT_PUBLIC_AUTH_API_BASE_URL || "http://localhost:5000/api";
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl,
@@ -18,13 +19,56 @@ const rawBaseQuery = fetchBaseQuery({
 });
 
 const baseQueryWithStatusHandling = async (args, api, extraOptions) => {
-  const result = await rawBaseQuery(args, api, extraOptions);
+  let requestArgs = typeof args === "string" ? { url: args } : { ...args };
+  let targetUrl = requestArgs.url || "";
+  const method = requestArgs.method || "GET";
+
+  // GUARANTEE: Intercept ALL Auth and User requests and force them to local backend (http://localhost:5000/api)
+  if (
+    targetUrl.includes("/auth") ||
+    targetUrl.includes("/users") ||
+    targetUrl.includes("check-email") ||
+    targetUrl.includes("is-available")
+  ) {
+    if (targetUrl.includes("api.escuelajs.co")) {
+      targetUrl = targetUrl.replace(/https?:\/\/api\.escuelajs\.co(\/api\/v1)?/, authBaseUrl);
+    } else if (!targetUrl.startsWith("http")) {
+      const cleanPath = targetUrl.startsWith("/") ? targetUrl : `/${targetUrl}`;
+      targetUrl = `${authBaseUrl}${cleanPath}`;
+    }
+    requestArgs.url = targetUrl;
+  }
+
+  const isAuth = targetUrl.includes("5000") || targetUrl.includes("/auth") || targetUrl.includes("/users");
+
+  if (isAuth && typeof window !== "undefined") {
+    console.group(`%c🌐 [FRONTEND API CALL] ${method} ${targetUrl}`, "color: #3b82f6; font-weight: bold;");
+    if (requestArgs?.body) {
+      const masked = { ...requestArgs.body };
+      if (masked.password) masked.password = "******";
+      console.log("Request Payload:", masked);
+    }
+  }
+
+  const result = await rawBaseQuery(requestArgs, api, extraOptions);
+
+  if (isAuth && typeof window !== "undefined") {
+    if (result.error) {
+      console.error(`%c❌ [FRONTEND API ERROR] ${method} ${targetUrl} ->`, "color: #ef4444; font-weight: bold;", result.error);
+    } else {
+      console.log(`%c✅ [FRONTEND API SUCCESS] ${method} ${targetUrl} ->`, "color: #22c55e; font-weight: bold;", result.data);
+    }
+    console.groupEnd();
+  }
 
   if (result.error) {
     const statusCode = result.error.status;
     let rawMessage = result.error.data?.message;
     if (Array.isArray(rawMessage)) {
       rawMessage = rawMessage.join(", ");
+    }
+    if (statusCode === "FETCH_ERROR") {
+      rawMessage = "Backend server is unreachable at http://localhost:5000. Please ensure the backend is running (cd backend && npm run dev).";
     }
     const details = getHttpStatusDetails(statusCode, rawMessage);
     result.error.statusCode = details.code;
@@ -42,7 +86,7 @@ export const productApi = createApi({
   tagTypes: ["Products", "Product", "Categories", "Category", "Users", "User", "Auth", "Locations"],
   endpoints: (builder) => ({
     // ==========================================
-    // 1-8. PRODUCTS ENDPOINTS
+    // 1-8. PRODUCTS ENDPOINTSl
     // ==========================================
     getProducts: builder.query({
       query: (params) => {
@@ -119,7 +163,7 @@ export const productApi = createApi({
     // 9-15. USERS ENDPOINTS
     // ==========================================
     getUsers: builder.query({
-      query: () => "/users",
+      query: () => `${authBaseUrl}/users`,
       providesTags: (result) =>
         result && Array.isArray(result)
           ? [
@@ -130,13 +174,13 @@ export const productApi = createApi({
     }),
 
     getUserById: builder.query({
-      query: (id) => `/users/${id}`,
+      query: (id) => `${authBaseUrl}/users/${id}`,
       providesTags: (result, error, id) => [{ type: "User", id }],
     }),
 
     createUser: builder.mutation({
       query: (newUser) => ({
-        url: "/users",
+        url: `${authBaseUrl}/auth/register`,
         method: "POST",
         body: newUser,
       }),
@@ -145,7 +189,7 @@ export const productApi = createApi({
 
     registerUser: builder.mutation({
       query: (userData) => ({
-        url: "/users",
+        url: `${authBaseUrl}/auth/register`,
         method: "POST",
         body: userData,
       }),
@@ -165,7 +209,7 @@ export const productApi = createApi({
 
     updateUser: builder.mutation({
       query: ({ id, ...patch }) => ({
-        url: `/users/${id}`,
+        url: `${authBaseUrl}/users/${id}`,
         method: "PUT",
         body: patch,
       }),
@@ -177,80 +221,28 @@ export const productApi = createApi({
 
     deleteUser: builder.mutation({
       query: (id) => ({
-        url: `/users/${id}`,
+        url: `${authBaseUrl}/users/${id}`,
         method: "DELETE",
       }),
       invalidatesTags: [{ type: "Users", id: "LIST" }],
     }),
 
     checkUserAvailability: builder.mutation({
-      async queryFn(body, _api, _extraOptions, baseQuery) {
-        const emailToCheck = String(body?.email || "").trim().toLowerCase();
-        console.group(`[productApi] checkUserAvailability: "${emailToCheck}"`);
-        console.log("Checking email payload:", body);
-
-        // 1. Reserved test / demo accounts that must always be treated as registered
-        const reservedEmails = [
-          "admin@nexacart.com",
-          "admin@mail.com",
-          "manager@nexacart.com",
-          "manager@mail.com",
-          "john@mail.com",
-          "maria@mail.com",
-        ];
-
-        if (reservedEmails.includes(emailToCheck)) {
-          console.warn("[productApi] Email is a reserved demo account -> Registered (isAvailable: false)");
-          console.groupEnd();
-          return { data: { isAvailable: false, email: emailToCheck, reason: "reserved" } };
-        }
-
-        // 2. Cross-verify against live registered users in database (/users)
-        // EscuelaJS mock API's /users/is-available endpoint is known to erroneously return { isAvailable: false }
-        // for all emails. Cross-referencing the real /users database provides 100% accurate results.
+      query: (body) => ({
+        url: `${authBaseUrl}/auth/check-email`,
+        method: "POST",
+        body,
+      }),
+      async onQueryStarted(body, { queryFulfilled }) {
+        console.group(`%c🌐 [FRONTEND] checkUserAvailability: "${body?.email}"`, "color: #3b82f6; font-weight: bold;");
+        console.log("Endpoint:", `${authBaseUrl}/auth/check-email`);
         try {
-          console.log("[productApi] Checking live registered users list (/users)...");
-          const usersRes = await baseQuery({ url: "/users", method: "GET" });
-
-          if (Array.isArray(usersRes?.data)) {
-            console.log(`[productApi] Fetched ${usersRes.data.length} users from database.`);
-            const isTaken = usersRes.data.some(
-              (u) => String(u?.email || "").trim().toLowerCase() === emailToCheck
-            );
-            console.log(
-              `[productApi] Email "${emailToCheck}" in database?`,
-              isTaken ? "YES (isAvailable: false)" : "NO (isAvailable: true)"
-            );
-            console.groupEnd();
-            return { data: { isAvailable: !isTaken, email: emailToCheck } };
-          }
-        } catch (dbErr) {
-          console.warn("[productApi] Failed to query /users list for verification:", dbErr);
+          const { data } = await queryFulfilled;
+          console.log("%c✅ [FRONTEND] Availability Result:", "color: #22c55e; font-weight: bold;", data);
+        } catch (error) {
+          console.warn("%c❌ [FRONTEND] Availability Error:", "color: #ef4444; font-weight: bold;", error);
         }
-
-        // 3. Fallback: Call /users/is-available endpoint directly
-        try {
-          console.log("[productApi] Fallback: Calling /users/is-available endpoint directly...");
-          const res = await baseQuery({
-            url: "/users/is-available",
-            method: "POST",
-            body,
-          });
-          console.log("[productApi] Raw /users/is-available response:", res);
-
-          if (res?.data?.isAvailable === true) {
-            console.log("[productApi] /users/is-available returned isAvailable: true");
-            console.groupEnd();
-            return { data: { isAvailable: true, email: emailToCheck } };
-          }
-        } catch (apiErr) {
-          console.warn("[productApi] /users/is-available error:", apiErr);
-        }
-
-        // Default: If not found in database and format is valid, email is available
-        console.log(`[productApi] Email "${emailToCheck}" is verified as AVAILABLE (isAvailable: true).`);
         console.groupEnd();
-        return { data: { isAvailable: true, email: emailToCheck } };
       },
     }),
 
@@ -259,21 +251,42 @@ export const productApi = createApi({
     // ==========================================
     loginUser: builder.mutation({
       query: (credentials) => ({
-        url: "/auth/login",
+        url: `${authBaseUrl}/auth/login`,
         method: "POST",
         body: credentials,
       }),
       invalidatesTags: ["Auth"],
+      async onQueryStarted(credentials, { queryFulfilled }) {
+        console.group("[productApi] 🚀 loginUser API Call (MongoDB Backend)");
+        console.log("Submitting Credentials:", { email: credentials.email, password: "***" });
+        try {
+          const { data } = await queryFulfilled;
+          console.log("[productApi] ✅ Login Success Response:", data);
+        } catch (error) {
+          console.error("[productApi] ❌ Login Error Response:", error);
+        }
+        console.groupEnd();
+      },
     }),
 
     getUserProfile: builder.query({
-      query: () => "/auth/profile",
+      query: () => `${authBaseUrl}/auth/profile`,
       providesTags: ["Auth"],
+      async onQueryStarted(arg, { queryFulfilled }) {
+        console.group("[productApi] 👤 getUserProfile API Call");
+        try {
+          const { data } = await queryFulfilled;
+          console.log("[productApi] ✅ Profile Data Received:", data);
+        } catch (error) {
+          console.warn("[productApi] ⚠️ Profile Fetch Error:", error);
+        }
+        console.groupEnd();
+      },
     }),
 
     refreshToken: builder.mutation({
       query: (body) => ({
-        url: "/auth/refresh-token",
+        url: `${authBaseUrl}/auth/refresh-token`,
         method: "POST",
         body,
       }),

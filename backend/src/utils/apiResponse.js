@@ -1,0 +1,30 @@
+/**
+ * Standard API Response Formatters for NexaCart Backend
+ */
+
+const sendSuccess = (res, statusCode = 200, message = "Success", data = {}) => {
+  return res.status(statusCode).json({
+    success: true,
+    message,
+    ...data,
+  });
+};
+
+const sendError = (res, statusCode = 500, message = "An error occurred", errors = null) => {
+  const response = {
+    success: false,
+    message,
+  };
+
+  if (errors) {
+    response.errors = Array.isArray(errors) ? errors : [errors];
+  }
+
+  return res.status(statusCode).json(response);
+};
+
+module.exports = {
+  sendSuccess,
+  sendError,
+};
+

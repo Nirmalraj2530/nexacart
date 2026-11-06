@@ -149,21 +149,21 @@ export function LoginModal() {
 
     try {
       const authData = await loginUser({ email: trimmedEmail, password: enteredPassword }).unwrap();
-      if (authData.access_token) {
-        dispatch(setCredentials({ access_token: authData.access_token }));
-
-        let userProfile = null;
-        try {
-          userProfile = await triggerGetProfile().unwrap();
-          dispatch(setCredentials({ access_token: authData.access_token, user: userProfile }));
-        } catch {
-          userProfile = {
-            name: trimmedEmail.split("@")[0],
-            email: trimmedEmail,
-            role: "customer",
-          };
-          dispatch(setCredentials({ access_token: authData.access_token, user: userProfile }));
+      const token = authData.access_token || authData.token;
+      if (token) {
+        let userProfile = authData.user || null;
+        if (!userProfile) {
+          try {
+            userProfile = await triggerGetProfile().unwrap();
+          } catch {
+            userProfile = {
+              name: trimmedEmail.split("@")[0],
+              email: trimmedEmail,
+              role: "customer",
+            };
+          }
         }
+        dispatch(setCredentials({ access_token: token, user: userProfile }));
 
         const trustedRole = String(userProfile?.role || "customer").toLowerCase();
 
@@ -185,16 +185,16 @@ export function LoginModal() {
         }
       }
     } catch (err) {
-      // Demo accounts for evaluation and test scenarios
-      if (trimmedEmail === "admin@nexacart.com" || trimmedEmail === "admin@mail.com") {
+      console.error("[LoginModal] ❌ Login error:", err);
+      if (err?.status === "FETCH_ERROR" && (trimmedEmail === "admin@nexacart.com" || trimmedEmail === "admin@mail.com")) {
         loginAsRole("Admin");
         dispatch(closeLoginModal());
         router.push("/admin");
-      } else if (trimmedEmail === "manager@nexacart.com" || trimmedEmail === "manager@mail.com") {
+      } else if (err?.status === "FETCH_ERROR" && (trimmedEmail === "manager@nexacart.com" || trimmedEmail === "manager@mail.com")) {
         loginAsRole("Manager");
         dispatch(closeLoginModal());
         router.push("/admin");
-      } else if (trimmedEmail === "john@mail.com" && enteredPassword === "changeme") {
+      } else if (err?.status === "FETCH_ERROR" && trimmedEmail === "john@mail.com" && enteredPassword === "changeme") {
         loginAsRole("Customer");
         handlePendingCartAdd();
         dispatch(closeLoginModal());
