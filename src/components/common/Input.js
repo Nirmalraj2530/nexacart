@@ -8,6 +8,7 @@ export const Input = React.forwardRef(function Input(
     error,
     helperText,
     icon: Icon,
+    rightElement,
     type = "text",
     className = "",
     id,
@@ -31,10 +32,15 @@ export const Input = React.forwardRef(function Input(
           id={inputId}
           type={type}
           className={`input-field ${Icon ? "has-icon" : ""} ${
-            error ? "input-error" : ""
-          } ${className}`.trim()}
+            rightElement ? "has-right-element" : ""
+          } ${error ? "input-error" : ""} ${className}`.trim()}
           {...props}
         />
+        {rightElement && (
+          <div className="input-right-element">
+            {rightElement}
+          </div>
+        )}
       </div>
       {error ? (
         <p className="error-message">{error}</p>

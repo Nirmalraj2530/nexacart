@@ -9,6 +9,11 @@ import {
   cancelOrder,
   requestReturn,
 } from "@/redux/slices/orderSlice";
+import {
+  useGetMyOrdersQuery,
+  useCancelOrderMutation,
+  useRequestOrderReturnMutation,
+} from "@/redux/services/productApi";
 import { addToast } from "@/redux/slices/uiSlice";
 import { formatCurrency, cleanImageUrl } from "@/utils/formatters";
 import { ORDER_STATUSES } from "@/data/mockOrders";
@@ -32,7 +37,21 @@ import {
 
 export default function AccountOrdersPage() {
   const dispatch = useDispatch();
-  const orders = useSelector(selectOrders);
+  const token = useSelector((state) => state.auth.token);
+  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const hasLiveJwt = Boolean(isAuthenticated && token && !token.startsWith("demo_jwt_token_"));
+
+  const localOrders = useSelector(selectOrders);
+  const { data: apiOrders = [] } = useGetMyOrdersQuery(undefined, { skip: !hasLiveJwt });
+  const [cancelOrderApi] = useCancelOrderMutation();
+  const [requestReturnApi] = useRequestOrderReturnMutation();
+
+  const orders = hasLiveJwt
+    ? [
+        ...apiOrders,
+        ...localOrders.filter((lo) => !apiOrders.some((ao) => ao.id === lo.id)),
+      ]
+    : localOrders;
 
   const [filterStatus, setFilterStatus] = useState("All");
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -65,13 +84,31 @@ export default function AccountOrdersPage() {
     }
   };
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
     if (!actionModal.orderId) return;
 
+    const isServerOrder = hasLiveJwt && apiOrders.some((o) => o.id === actionModal.orderId);
+
     if (actionModal.type === "cancel") {
+      if (isServerOrder) {
+        try {
+          await cancelOrderApi({ orderId: actionModal.orderId, reason: actionReason }).unwrap();
+        } catch (err) {
+          dispatch(addToast({ message: err?.friendlyMessage || "Failed to cancel order", type: "error" }));
+          return;
+        }
+      }
       dispatch(cancelOrder({ orderId: actionModal.orderId, reason: actionReason }));
       dispatch(addToast({ message: `Order ${actionModal.orderId} cancelled`, type: "info" }));
     } else if (actionModal.type === "return") {
+      if (isServerOrder) {
+        try {
+          await requestReturnApi({ orderId: actionModal.orderId, reason: actionReason }).unwrap();
+        } catch (err) {
+          dispatch(addToast({ message: err?.friendlyMessage || "Failed to request return", type: "error" }));
+          return;
+        }
+      }
       dispatch(requestReturn({ orderId: actionModal.orderId, reason: actionReason }));
       dispatch(addToast({ message: `Return requested for ${actionModal.orderId}`, type: "success" }));
     }

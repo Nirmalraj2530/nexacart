@@ -1,8 +1,15 @@
 "use client";
 
 import React, { useState, useSyncExternalStore, useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  useGetAddressesQuery,
+  useAddAddressMutation,
+  useUpdateAddressMutation,
+  useSetDefaultAddressMutation,
+  useDeleteAddressMutation,
+} from "@/redux/services/productApi";
 import { addToast } from "@/redux/slices/uiSlice";
-import { useDispatch } from "react-redux";
 import { Button } from "@/components/common/Button";
 import { Input } from "@/components/common/Input";
 import { Modal } from "@/components/common/Modal";
@@ -22,18 +29,6 @@ const INITIAL_ADDRESSES = [
     country: "United States",
     type: "Home",
     isDefault: true,
-  },
-  {
-    id: "addr-2",
-    fullName: "John Doe (Office)",
-    phone: "+1 (555) 019-8821",
-    address: "500 Howard Street, Floor 12",
-    city: "San Francisco",
-    state: "California",
-    pincode: "94105",
-    country: "United States",
-    type: "Work",
-    isDefault: false,
   },
 ];
 
@@ -59,6 +54,16 @@ const getAddressesSnapshot = () => {
 
 export default function AccountAddressesPage() {
   const dispatch = useDispatch();
+  const token = useSelector((state) => state.auth.token);
+  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const hasLiveJwt = Boolean(isAuthenticated && token && !token.startsWith("demo_jwt_token_"));
+
+  const { data: apiAddresses } = useGetAddressesQuery(undefined, { skip: !hasLiveJwt });
+  const [addAddressApi, { isLoading: isAdding }] = useAddAddressMutation();
+  const [updateAddressApi, { isLoading: isUpdating }] = useUpdateAddressMutation();
+  const [setDefaultAddressApi] = useSetDefaultAddressMutation();
+  const [deleteAddressApi] = useDeleteAddressMutation();
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -67,13 +72,15 @@ export default function AccountAddressesPage() {
     getAddressesSnapshot,
     () => JSON.stringify(INITIAL_ADDRESSES)
   );
-  const addresses = useMemo(() => {
+  const localAddresses = useMemo(() => {
     try {
       return JSON.parse(rawAddresses);
     } catch {
       return INITIAL_ADDRESSES;
     }
   }, [rawAddresses]);
+
+  const addresses = hasLiveJwt && Array.isArray(apiAddresses) ? apiAddresses : localAddresses;
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -116,14 +123,34 @@ export default function AccountAddressesPage() {
     setModalOpen(true);
   };
 
-  const handleDelete = (id) => {
-    const updated = addresses.filter((a) => a.id !== id);
+  const handleDelete = async (id) => {
+    if (hasLiveJwt) {
+      try {
+        await deleteAddressApi(id).unwrap();
+        dispatch(addToast({ message: "Address deleted", type: "info" }));
+        return;
+      } catch (err) {
+        dispatch(addToast({ message: err?.friendlyMessage || "Failed to delete address", type: "error" }));
+        return;
+      }
+    }
+    const updated = localAddresses.filter((a) => a.id !== id);
     saveAddresses(updated);
     dispatch(addToast({ message: "Address deleted", type: "info" }));
   };
 
-  const handleSetDefault = (id) => {
-    const updated = addresses.map((a) => ({
+  const handleSetDefault = async (id) => {
+    if (hasLiveJwt) {
+      try {
+        await setDefaultAddressApi(id).unwrap();
+        dispatch(addToast({ message: "Default address updated", type: "success" }));
+        return;
+      } catch (err) {
+        dispatch(addToast({ message: err?.friendlyMessage || "Failed to update default address", type: "error" }));
+        return;
+      }
+    }
+    const updated = localAddresses.map((a) => ({
       ...a,
       isDefault: a.id === id,
     }));
@@ -131,16 +158,33 @@ export default function AccountAddressesPage() {
     dispatch(addToast({ message: "Default address updated", type: "success" }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.fullName || !formData.address || !formData.city || !formData.pincode) {
+    if (!formData.fullName || !formData.phone || !formData.address || !formData.city || !formData.state || !formData.pincode) {
       dispatch(addToast({ message: "Please fill in all required fields", type: "error" }));
       return;
     }
 
+    if (hasLiveJwt) {
+      try {
+        if (editingId) {
+          await updateAddressApi({ addressId: editingId, ...formData }).unwrap();
+          dispatch(addToast({ message: "Address updated successfully", type: "success" }));
+        } else {
+          await addAddressApi(formData).unwrap();
+          dispatch(addToast({ message: "New address saved to account", type: "success" }));
+        }
+        setModalOpen(false);
+        return;
+      } catch (err) {
+        dispatch(addToast({ message: err?.friendlyMessage || err?.data?.message || "Failed to save address", type: "error" }));
+        return;
+      }
+    }
+
     let updated;
     if (editingId) {
-      updated = addresses.map((a) => {
+      updated = localAddresses.map((a) => {
         if (a.id === editingId) {
           return { ...formData, id: editingId };
         }
@@ -153,9 +197,9 @@ export default function AccountAddressesPage() {
         id: `addr-${Date.now()}`,
       };
       if (formData.isDefault) {
-        updated = [newAddr, ...addresses.map((a) => ({ ...a, isDefault: false }))];
+        updated = [newAddr, ...localAddresses.map((a) => ({ ...a, isDefault: false }))];
       } else {
-        updated = [...addresses, newAddr];
+        updated = [...localAddresses, newAddr];
       }
       dispatch(addToast({ message: "New address added", type: "success" }));
     }
@@ -182,88 +226,95 @@ export default function AccountAddressesPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {addresses.map((addr) => (
-          <div
-            key={addr.id}
-            className={`rounded-3xl border p-5 shadow-xs transition-all relative flex flex-col justify-between space-y-4 ${
-              addr.isDefault
-                ? "bg-indigo-50/30 border-indigo-300 ring-2 ring-indigo-500/10"
-                : "bg-white border-slate-200/80 hover:border-slate-300"
-            }`}
-          >
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                  {addr.type === "Work" ? <Briefcase className="w-3 h-3" /> : <Home className="w-3 h-3" />}
-                  {addr.type || "Home"}
-                </span>
-
-                {addr.isDefault && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 bg-indigo-100/70 px-2 py-0.5 rounded-full">
-                    <CheckCircle className="w-3 h-3" /> Default
+      {addresses.length === 0 ? (
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-3">
+          <MapPin className="w-8 h-8 text-slate-300 mx-auto" />
+          <p className="text-sm font-bold text-slate-800">No saved delivery addresses yet</p>
+          <p className="text-xs text-slate-500">Add an address to prefill your checkout shipping details automatically.</p>
+          <Button variant="primary" size="sm" icon={Plus} onClick={handleOpenAdd}>
+            Add Your First Address
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {addresses.map((addr) => (
+            <div
+              key={addr.id}
+              className={`rounded-3xl border p-5 shadow-xs transition-all relative flex flex-col justify-between space-y-4 ${
+                addr.isDefault
+                  ? "bg-indigo-50/30 border-indigo-300 ring-2 ring-indigo-500/10"
+                  : "bg-white border-slate-200/80 hover:border-slate-300"
+              }`}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                    {addr.type === "Work" ? <Briefcase className="w-3 h-3" /> : <Home className="w-3 h-3" />}
+                    {addr.type || "Home"}
                   </span>
+
+                  {addr.isDefault && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 bg-indigo-100/70 px-2 py-0.5 rounded-full">
+                      <CheckCircle className="w-3 h-3" /> Default
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="font-bold text-sm text-slate-900">{addr.fullName}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {addr.address}, {addr.city}, {addr.state} {addr.pincode}, {addr.country}
+                </p>
+                <p className="text-xs text-slate-500 font-mono">Phone: {addr.phone}</p>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                {!addr.isDefault ? (
+                  <button
+                    onClick={() => handleSetDefault(addr.id)}
+                    className="text-xs font-bold text-indigo-600 hover:underline"
+                  >
+                    Set as Default
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400 font-medium">Primary Delivery Address</span>
                 )}
-              </div>
 
-              <h3 className="font-bold text-sm text-slate-900">{addr.fullName}</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {addr.address}, {addr.city}, {addr.state} {addr.pincode}, {addr.country}
-              </p>
-              <p className="text-xs text-slate-500 font-mono">Phone: {addr.phone}</p>
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              {!addr.isDefault ? (
-                <button
-                  onClick={() => handleSetDefault(addr.id)}
-                  className="text-xs font-bold text-indigo-600 hover:underline"
-                >
-                  Set as Default
-                </button>
-              ) : (
-                <span className="text-[11px] text-slate-400 font-semibold">Primary Address</span>
-              )}
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleOpenEdit(addr)}
-                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  title="Edit address"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(addr.id)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                  title="Delete address"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleOpenEdit(addr)}
+                    className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    aria-label="Edit address"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(addr.id)}
+                    className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                    aria-label="Delete address"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Add / Edit Address Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}>
-        <form onSubmit={handleSubmit} className="p-2 space-y-4">
-          <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
-            {editingId ? "Edit Delivery Address" : "Add New Delivery Address"}
-          </h2>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Input
-                label="Full Name *"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                placeholder="Recipient's Name"
-                required
-              />
-            </div>
-
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingId ? "Edit Delivery Address" : "Add New Address"}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Recipient Name *"
+              value={formData.fullName}
+              onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+              placeholder="John Doe"
+              required
+            />
             <Input
               label="Phone Number *"
               value={formData.phone}
@@ -271,76 +322,72 @@ export default function AccountAddressesPage() {
               placeholder="+1 (555) 000-0000"
               required
             />
+          </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Address Type</label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white"
-              >
-                <option value="Home">Home</option>
-                <option value="Work">Work</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+          <Input
+            label="Street Address / Suite *"
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            placeholder="123 Market St, Apt 4B"
+            required
+          />
 
-            <div className="col-span-2">
-              <Input
-                label="Street Address *"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="123 Main St, Apt 4"
-                required
-              />
-            </div>
-
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Input
               label="City *"
               value={formData.city}
               onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              placeholder="San Francisco"
               required
             />
-
             <Input
-              label="State / Province"
+              label="State *"
               value={formData.state}
               onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              placeholder="California"
-            />
-
-            <Input
-              label="ZIP / Postal Code *"
-              value={formData.pincode}
-              onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-              placeholder="94103"
               required
             />
-
             <Input
-              label="Country"
-              value={formData.country}
-              onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+              label="ZIP / Pincode *"
+              value={formData.pincode}
+              onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+              required
             />
           </div>
 
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 pt-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.isDefault}
-              onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-              className="rounded text-indigo-600 focus:ring-indigo-500"
-            />
-            Make this my primary default delivery address
-          </label>
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <div className="flex items-center gap-2">
+              {["Home", "Work", "Other"].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: t })}
+                  className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                    formData.type === t
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-white text-slate-600 border-slate-200"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.isDefault}
+                onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
+                className="rounded text-indigo-600"
+              />
+              Set as Default
+            </label>
+          </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="outline" size="sm" type="button" onClick={() => setModalOpen(false)}>
+            <Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" size="sm" type="submit">
-              {editingId ? "Save Changes" : "Save Address"}
+            <Button type="submit" variant="primary" isLoading={isAdding || isUpdating}>
+              {editingId ? "Update Address" : "Save Address"}
             </Button>
           </div>
         </form>

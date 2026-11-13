@@ -2,6 +2,15 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
+const productRoutes = require("./routes/productRoutes");
+const fileRoutes = require("./routes/fileRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
+const couponRoutes = require("./routes/couponRoutes");
+const cartRoutes = require("./routes/cartRoutes");
+const wishlistRoutes = require("./routes/wishlistRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
@@ -25,8 +34,8 @@ app.use(
 );
 
 // 2. Request Parsers
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 // 2.1 Live Console Logger for Request/Response Tracking
 app.use((req, res, next) => {
@@ -34,6 +43,8 @@ app.use((req, res, next) => {
   const safeBody = req.body ? { ...req.body } : {};
   if (safeBody.password) safeBody.password = "******";
   if (safeBody.confirmPassword) safeBody.confirmPassword = "******";
+  if (safeBody.currentPassword) safeBody.currentPassword = "******";
+  if (safeBody.newPassword) safeBody.newPassword = "******";
 
   console.log(`\n📥 [BACKEND REQUEST] ${req.method} ${req.originalUrl} - ${new Date().toLocaleTimeString()}`);
   if (Object.keys(safeBody).length > 0) {
@@ -70,17 +81,88 @@ app.get("/api/health", (req, res) => {
 // 4. API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/files", fileRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/coupons", couponRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/wishlist", wishlistRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Root route aliases for flexible client base URLs
 app.use("/auth", authRoutes);
 app.use("/users", userRoutes);
+app.use("/categories", categoryRoutes);
+app.use("/products", productRoutes);
+app.use("/files", fileRoutes);
+app.use("/orders", orderRoutes);
+app.use("/reviews", reviewRoutes);
+app.use("/coupons", couponRoutes);
+app.use("/cart", cartRoutes);
+app.use("/wishlist", wishlistRoutes);
+app.use("/admin", adminRoutes);
+
+// Store Locations endpoint
+const STORE_LOCATIONS = [
+  {
+    id: 1,
+    name: "NexaCart Flagship Store - Downtown",
+    city: "New York",
+    address: "450 Fifth Avenue, Suite 100, New York, NY 10018",
+    latitude: 40.7517,
+    longitude: -73.9822,
+  },
+  {
+    id: 2,
+    name: "NexaCart Tech Hub & Pickup Center",
+    city: "San Francisco",
+    address: "725 Market Street, San Francisco, CA 94103",
+    latitude: 37.7869,
+    longitude: -122.4041,
+  },
+  {
+    id: 3,
+    name: "NexaCart Express Distribution Hub",
+    city: "Chicago",
+    address: "210 N Michigan Ave, Chicago, IL 60601",
+    latitude: 41.8861,
+    longitude: -87.6245,
+  },
+  {
+    id: 4,
+    name: "NexaCart South Fulfillment Station",
+    city: "Austin",
+    address: "500 Congress Ave, Austin, TX 78701",
+    latitude: 30.2672,
+    longitude: -97.7431,
+  },
+];
+
+app.get("/api/locations", (req, res) => res.status(200).json(STORE_LOCATIONS));
+app.get("/locations", (req, res) => res.status(200).json(STORE_LOCATIONS));
 
 // Root Welcome Route
 app.get("/", (req, res) => {
   res.status(200).json({
     name: "NexaCart E-Commerce REST API",
-    version: "1.0.0",
+    version: "2.1.0",
     docs: "/api/health",
+    endpoints: {
+      auth: "/api/auth",
+      users: "/api/users",
+      categories: "/api/categories",
+      products: "/api/products",
+      orders: "/api/orders",
+      reviews: "/api/reviews",
+      coupons: "/api/coupons",
+      cart: "/api/cart",
+      wishlist: "/api/wishlist",
+      files: "/api/files",
+      locations: "/api/locations",
+      admin: "/api/admin/analytics",
+    },
   });
 });
 
@@ -89,4 +171,3 @@ app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
-

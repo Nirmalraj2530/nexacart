@@ -36,14 +36,14 @@ export default function AdminCategoriesPage() {
   const handleOpenCreate = () => {
     setEditCategory(null);
     setCategoryName("");
-    setCategoryImage("https://picsum.photos/600/600");
+    setCategoryImage("https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80");
     setModalOpen(true);
   };
 
   const handleOpenEdit = (cat) => {
     setEditCategory(cat);
     setCategoryName(cat.name);
-    setCategoryImage(cat.image || "https://picsum.photos/600/600");
+    setCategoryImage(cat.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80");
     setModalOpen(true);
   };
 
@@ -66,6 +66,9 @@ export default function AdminCategoriesPage() {
         }).unwrap();
         dispatch(addToast({ message: `Created category "${categoryName}"`, type: "success" }));
       }
+      setCategoryName("");
+      setCategoryImage("");
+      setEditCategory(null);
       setModalOpen(false);
     } catch (err) {
       dispatch(addToast({ message: err?.data?.message || "Operation failed", type: "error" }));

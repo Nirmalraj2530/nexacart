@@ -1,9 +1,15 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { getHttpStatusDetails } from "@/utils/httpErrors";
-import { sanitizeCategories } from "@/utils/formatters";
 
-const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api";
-const authBaseUrl = process.env.NEXT_PUBLIC_AUTH_API_BASE_URL || "http://localhost:5000/api";
+const localBackendUrl = "http://localhost:5000/api";
+const baseUrl =
+  process.env.NEXT_PUBLIC_API_BASE_URL && !process.env.NEXT_PUBLIC_API_BASE_URL.includes("escuelajs.co")
+    ? process.env.NEXT_PUBLIC_API_BASE_URL
+    : localBackendUrl;
+const authBaseUrl =
+  process.env.NEXT_PUBLIC_AUTH_API_BASE_URL && !process.env.NEXT_PUBLIC_AUTH_API_BASE_URL.includes("escuelajs.co")
+    ? process.env.NEXT_PUBLIC_AUTH_API_BASE_URL
+    : baseUrl;
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl,
@@ -18,23 +24,68 @@ const rawBaseQuery = fetchBaseQuery({
   },
 });
 
+let activeRefreshPromise = null;
+
+const attemptTokenRefresh = async (api, extraOptions) => {
+  if (typeof window === "undefined") return false;
+  const currentToken = localStorage.getItem("nexacart_access_token");
+  if (!currentToken || currentToken.startsWith("demo_jwt_token_")) {
+    return false;
+  }
+
+  if (!activeRefreshPromise) {
+    activeRefreshPromise = (async () => {
+      try {
+        const refreshRes = await rawBaseQuery(
+          {
+            url: `${authBaseUrl}/auth/refresh-token`,
+            method: "POST",
+          },
+          api,
+          extraOptions
+        );
+
+        const nextToken = refreshRes?.data?.access_token || refreshRes?.data?.token;
+        if (nextToken) {
+          localStorage.setItem("nexacart_access_token", nextToken);
+          api.dispatch({
+            type: "auth/setCredentials",
+            payload: { access_token: nextToken },
+          });
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      } finally {
+        activeRefreshPromise = null;
+      }
+    })();
+  }
+
+  return activeRefreshPromise;
+};
+
 const baseQueryWithStatusHandling = async (args, api, extraOptions) => {
   let requestArgs = typeof args === "string" ? { url: args } : { ...args };
   let targetUrl = requestArgs.url || "";
   const method = requestArgs.method || "GET";
 
-  // GUARANTEE: Intercept ALL Auth and User requests and force them to local backend (http://localhost:5000/api)
-  if (
-    targetUrl.includes("/auth") ||
-    targetUrl.includes("/users") ||
-    targetUrl.includes("check-email") ||
-    targetUrl.includes("is-available")
-  ) {
-    if (targetUrl.includes("api.escuelajs.co")) {
-      targetUrl = targetUrl.replace(/https?:\/\/api\.escuelajs\.co(\/api\/v1)?/, authBaseUrl);
-    } else if (!targetUrl.startsWith("http")) {
-      const cleanPath = targetUrl.startsWith("/") ? targetUrl : `/${targetUrl}`;
+  // Ensure all endpoints route cleanly to our local NexaCart backend
+  if (targetUrl.includes("api.escuelajs.co")) {
+    targetUrl = targetUrl.replace(/https?:\/\/api\.escuelajs\.co(\/api\/v1)?/, baseUrl);
+    requestArgs.url = targetUrl;
+  } else if (!targetUrl.startsWith("http")) {
+    const cleanPath = targetUrl.startsWith("/") ? targetUrl : `/${targetUrl}`;
+    if (
+      targetUrl.includes("/auth") ||
+      targetUrl.includes("/users") ||
+      targetUrl.includes("check-email") ||
+      targetUrl.includes("is-available")
+    ) {
       targetUrl = `${authBaseUrl}${cleanPath}`;
+    } else {
+      targetUrl = `${baseUrl}${cleanPath}`;
     }
     requestArgs.url = targetUrl;
   }
@@ -43,14 +94,30 @@ const baseQueryWithStatusHandling = async (args, api, extraOptions) => {
 
   if (isAuth && typeof window !== "undefined") {
     console.group(`%c🌐 [FRONTEND API CALL] ${method} ${targetUrl}`, "color: #3b82f6; font-weight: bold;");
-    if (requestArgs?.body) {
+    if (requestArgs?.body && !(requestArgs.body instanceof FormData)) {
       const masked = { ...requestArgs.body };
       if (masked.password) masked.password = "******";
+      if (masked.currentPassword) masked.currentPassword = "******";
+      if (masked.newPassword) masked.newPassword = "******";
       console.log("Request Payload:", masked);
     }
   }
 
-  const result = await rawBaseQuery(requestArgs, api, extraOptions);
+  let result = await rawBaseQuery(requestArgs, api, extraOptions);
+
+  // Automatic encrypted JWT refresh & retry once on 401
+  const skipAutoRefresh =
+    targetUrl.includes("/auth/login") ||
+    targetUrl.includes("/auth/register") ||
+    targetUrl.includes("/auth/refresh-token") ||
+    targetUrl.includes("/auth/logout");
+
+  if (result.error?.status === 401 && !skipAutoRefresh) {
+    const refreshed = await attemptTokenRefresh(api, extraOptions);
+    if (refreshed) {
+      result = await rawBaseQuery(requestArgs, api, extraOptions);
+    }
+  }
 
   if (isAuth && typeof window !== "undefined") {
     if (result.error) {
@@ -83,10 +150,27 @@ const baseQueryWithStatusHandling = async (args, api, extraOptions) => {
 export const productApi = createApi({
   reducerPath: "productApi",
   baseQuery: baseQueryWithStatusHandling,
-  tagTypes: ["Products", "Product", "Categories", "Category", "Users", "User", "Auth", "Locations"],
+  tagTypes: [
+    "Products",
+    "Product",
+    "Categories",
+    "Category",
+    "Users",
+    "User",
+    "Auth",
+    "Addresses",
+    "Orders",
+    "Order",
+    "Reviews",
+    "Coupons",
+    "Cart",
+    "Wishlist",
+    "Analytics",
+    "Locations",
+  ],
   endpoints: (builder) => ({
     // ==========================================
-    // 1-8. PRODUCTS ENDPOINTSl
+    // 1-8. PRODUCTS ENDPOINTS
     // ==========================================
     getProducts: builder.query({
       query: (params) => {
@@ -126,7 +210,7 @@ export const productApi = createApi({
         method: "POST",
         body: newProduct,
       }),
-      invalidatesTags: [{ type: "Products", id: "LIST" }],
+      invalidatesTags: [{ type: "Products", id: "LIST" }, "Analytics"],
     }),
 
     updateProduct: builder.mutation({
@@ -138,6 +222,7 @@ export const productApi = createApi({
       invalidatesTags: (result, error, { id }) => [
         { type: "Product", id },
         { type: "Products", id: "LIST" },
+        "Analytics",
       ],
     }),
 
@@ -146,7 +231,7 @@ export const productApi = createApi({
         url: `/products/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: [{ type: "Products", id: "LIST" }],
+      invalidatesTags: [{ type: "Products", id: "LIST" }, "Analytics"],
     }),
 
     getRelatedProducts: builder.query({
@@ -160,7 +245,7 @@ export const productApi = createApi({
     }),
 
     // ==========================================
-    // 9-15. USERS ENDPOINTS
+    // 9-15. USERS & ADDRESSES ENDPOINTS
     // ==========================================
     getUsers: builder.query({
       query: () => `${authBaseUrl}/users`,
@@ -180,11 +265,11 @@ export const productApi = createApi({
 
     createUser: builder.mutation({
       query: (newUser) => ({
-        url: `${authBaseUrl}/auth/register`,
+        url: `${authBaseUrl}/users`,
         method: "POST",
         body: newUser,
       }),
-      invalidatesTags: [{ type: "Users", id: "LIST" }],
+      invalidatesTags: [{ type: "Users", id: "LIST" }, "Analytics"],
     }),
 
     registerUser: builder.mutation({
@@ -194,17 +279,6 @@ export const productApi = createApi({
         body: userData,
       }),
       invalidatesTags: [{ type: "Users", id: "LIST" }],
-      async onQueryStarted(userData, { queryFulfilled }) {
-        console.group("[productApi] registerUser API Call");
-        console.log("Submitting User Data:", { ...userData, password: "***" });
-        try {
-          const { data } = await queryFulfilled;
-          console.log("Registration API Response (Success 201):", data);
-        } catch (error) {
-          console.error("Registration API Response (Error):", error);
-        }
-        console.groupEnd();
-      },
     }),
 
     updateUser: builder.mutation({
@@ -224,7 +298,7 @@ export const productApi = createApi({
         url: `${authBaseUrl}/users/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: [{ type: "Users", id: "LIST" }],
+      invalidatesTags: [{ type: "Users", id: "LIST" }, "Analytics"],
     }),
 
     checkUserAvailability: builder.mutation({
@@ -233,21 +307,49 @@ export const productApi = createApi({
         method: "POST",
         body,
       }),
-      async onQueryStarted(body, { queryFulfilled }) {
-        console.group(`%c🌐 [FRONTEND] checkUserAvailability: "${body?.email}"`, "color: #3b82f6; font-weight: bold;");
-        console.log("Endpoint:", `${authBaseUrl}/auth/check-email`);
-        try {
-          const { data } = await queryFulfilled;
-          console.log("%c✅ [FRONTEND] Availability Result:", "color: #22c55e; font-weight: bold;", data);
-        } catch (error) {
-          console.warn("%c❌ [FRONTEND] Availability Error:", "color: #ef4444; font-weight: bold;", error);
-        }
-        console.groupEnd();
-      },
+    }),
+
+    getAddresses: builder.query({
+      query: () => `${authBaseUrl}/users/addresses`,
+      providesTags: ["Addresses"],
+    }),
+
+    addAddress: builder.mutation({
+      query: (address) => ({
+        url: `${authBaseUrl}/users/addresses`,
+        method: "POST",
+        body: address,
+      }),
+      invalidatesTags: ["Addresses"],
+    }),
+
+    updateAddress: builder.mutation({
+      query: ({ addressId, ...body }) => ({
+        url: `${authBaseUrl}/users/addresses/${addressId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Addresses"],
+    }),
+
+    setDefaultAddress: builder.mutation({
+      query: (addressId) => ({
+        url: `${authBaseUrl}/users/addresses/${addressId}/default`,
+        method: "PATCH",
+      }),
+      invalidatesTags: ["Addresses"],
+    }),
+
+    deleteAddress: builder.mutation({
+      query: (addressId) => ({
+        url: `${authBaseUrl}/users/addresses/${addressId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Addresses"],
     }),
 
     // ==========================================
-    // 16-18. AUTH ENDPOINTS
+    // 16-20. AUTH & PROFILE ENDPOINTS
     // ==========================================
     loginUser: builder.mutation({
       query: (credentials) => ({
@@ -255,33 +357,37 @@ export const productApi = createApi({
         method: "POST",
         body: credentials,
       }),
-      invalidatesTags: ["Auth"],
-      async onQueryStarted(credentials, { queryFulfilled }) {
-        console.group("[productApi] 🚀 loginUser API Call (MongoDB Backend)");
-        console.log("Submitting Credentials:", { email: credentials.email, password: "***" });
-        try {
-          const { data } = await queryFulfilled;
-          console.log("[productApi] ✅ Login Success Response:", data);
-        } catch (error) {
-          console.error("[productApi] ❌ Login Error Response:", error);
-        }
-        console.groupEnd();
-      },
+      invalidatesTags: ["Auth", "Addresses", "Orders", "Cart", "Wishlist"],
+    }),
+
+    logoutUser: builder.mutation({
+      query: () => ({
+        url: `${authBaseUrl}/auth/logout`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Auth", "Addresses", "Orders", "Cart", "Wishlist"],
     }),
 
     getUserProfile: builder.query({
       query: () => `${authBaseUrl}/auth/profile`,
       providesTags: ["Auth"],
-      async onQueryStarted(arg, { queryFulfilled }) {
-        console.group("[productApi] 👤 getUserProfile API Call");
-        try {
-          const { data } = await queryFulfilled;
-          console.log("[productApi] ✅ Profile Data Received:", data);
-        } catch (error) {
-          console.warn("[productApi] ⚠️ Profile Fetch Error:", error);
-        }
-        console.groupEnd();
-      },
+    }),
+
+    updateProfile: builder.mutation({
+      query: (profileData) => ({
+        url: `${authBaseUrl}/auth/profile`,
+        method: "PUT",
+        body: profileData,
+      }),
+      invalidatesTags: ["Auth"],
+    }),
+
+    changePassword: builder.mutation({
+      query: (passwords) => ({
+        url: `${authBaseUrl}/auth/change-password`,
+        method: "PUT",
+        body: passwords,
+      }),
     }),
 
     refreshToken: builder.mutation({
@@ -293,11 +399,10 @@ export const productApi = createApi({
     }),
 
     // ==========================================
-    // 19-25. CATEGORIES ENDPOINTS
+    // 21-27. CATEGORIES ENDPOINTS
     // ==========================================
     getCategories: builder.query({
       query: () => "/categories",
-      transformResponse: (response) => sanitizeCategories(response),
       providesTags: (result) =>
         result && Array.isArray(result)
           ? [
@@ -318,7 +423,7 @@ export const productApi = createApi({
         method: "POST",
         body: newCategory,
       }),
-      invalidatesTags: [{ type: "Categories", id: "LIST" }],
+      invalidatesTags: [{ type: "Categories", id: "LIST" }, "Analytics"],
     }),
 
     updateCategory: builder.mutation({
@@ -330,6 +435,7 @@ export const productApi = createApi({
       invalidatesTags: (result, error, { id }) => [
         { type: "Category", id },
         { type: "Categories", id: "LIST" },
+        { type: "Products", id: "LIST" },
       ],
     }),
 
@@ -338,7 +444,11 @@ export const productApi = createApi({
         url: `/categories/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: [{ type: "Categories", id: "LIST" }],
+      invalidatesTags: [
+        { type: "Categories", id: "LIST" },
+        { type: "Products", id: "LIST" },
+        "Analytics",
+      ],
     }),
 
     getCategoryBySlug: builder.query({
@@ -352,8 +462,176 @@ export const productApi = createApi({
     }),
 
     // ==========================================
-    // 26-27. FILE UPLOAD & LOCATIONS ENDPOINTS
+    // 28-34. ORDERS ENDPOINTS
     // ==========================================
+    placeOrder: builder.mutation({
+      query: (orderPayload) => ({
+        url: "/orders",
+        method: "POST",
+        body: orderPayload,
+      }),
+      invalidatesTags: ["Orders", "Analytics", { type: "Products", id: "LIST" }],
+    }),
+
+    getMyOrders: builder.query({
+      query: () => "/orders/my",
+      providesTags: ["Orders"],
+    }),
+
+    getAllOrders: builder.query({
+      query: () => "/orders",
+      providesTags: ["Orders"],
+    }),
+
+    trackOrder: builder.query({
+      query: (code) => `/orders/track/${encodeURIComponent(code)}`,
+      providesTags: (result, error, code) => [{ type: "Order", id: code }],
+    }),
+
+    cancelOrder: builder.mutation({
+      query: ({ orderId, reason }) => ({
+        url: `/orders/${orderId}/cancel`,
+        method: "PATCH",
+        body: { reason },
+      }),
+      invalidatesTags: ["Orders", "Analytics"],
+    }),
+
+    requestOrderReturn: builder.mutation({
+      query: ({ orderId, reason }) => ({
+        url: `/orders/${orderId}/return`,
+        method: "PATCH",
+        body: { reason },
+      }),
+      invalidatesTags: ["Orders", "Analytics"],
+    }),
+
+    updateOrderStatus: builder.mutation({
+      query: ({ orderId, status, paymentStatus }) => ({
+        url: `/orders/${orderId}/status`,
+        method: "PATCH",
+        body: { status, paymentStatus },
+      }),
+      invalidatesTags: ["Orders", "Analytics"],
+    }),
+
+    // ==========================================
+    // 35-37. REVIEWS ENDPOINTS
+    // ==========================================
+    getProductReviews: builder.query({
+      query: (productId) => `/products/${productId}/reviews`,
+      providesTags: (result, error, productId) => [{ type: "Reviews", id: productId }],
+    }),
+
+    createProductReview: builder.mutation({
+      query: ({ productId, rating, title, body }) => ({
+        url: `/products/${productId}/reviews`,
+        method: "POST",
+        body: { rating, title, body },
+      }),
+      invalidatesTags: (result, error, { productId }) => [
+        { type: "Reviews", id: productId },
+        "Analytics",
+      ],
+    }),
+
+    toggleReviewHelpful: builder.mutation({
+      query: ({ reviewId }) => ({
+        url: `/reviews/${reviewId}/helpful`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, { productId }) =>
+        productId ? [{ type: "Reviews", id: productId }] : ["Reviews"],
+    }),
+
+    // ==========================================
+    // 38-41. COUPONS ENDPOINTS
+    // ==========================================
+    validateCoupon: builder.mutation({
+      query: ({ code, subtotal }) => ({
+        url: "/coupons/validate",
+        method: "POST",
+        body: { code, subtotal },
+      }),
+    }),
+
+    getCoupons: builder.query({
+      query: () => "/coupons",
+      providesTags: ["Coupons"],
+    }),
+
+    createCoupon: builder.mutation({
+      query: (coupon) => ({
+        url: "/coupons",
+        method: "POST",
+        body: coupon,
+      }),
+      invalidatesTags: ["Coupons"],
+    }),
+
+    deleteCoupon: builder.mutation({
+      query: (id) => ({
+        url: `/coupons/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Coupons"],
+    }),
+
+    // ==========================================
+    // 42-47. CART & WISHLIST CLOUD SYNC ENDPOINTS
+    // ==========================================
+    getServerCart: builder.query({
+      query: () => "/cart",
+      providesTags: ["Cart"],
+    }),
+
+    syncServerCart: builder.mutation({
+      query: (items) => ({
+        url: "/cart",
+        method: "PUT",
+        body: { items },
+      }),
+      invalidatesTags: ["Cart"],
+    }),
+
+    clearServerCart: builder.mutation({
+      query: () => ({
+        url: "/cart",
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Cart"],
+    }),
+
+    getServerWishlist: builder.query({
+      query: () => "/wishlist",
+      providesTags: ["Wishlist"],
+    }),
+
+    addServerWishlistItem: builder.mutation({
+      query: (item) => ({
+        url: "/wishlist",
+        method: "POST",
+        body: item,
+      }),
+      invalidatesTags: ["Wishlist"],
+    }),
+
+    removeServerWishlistItem: builder.mutation({
+      query: (productId) => ({
+        url: `/wishlist/${productId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Wishlist"],
+    }),
+
+    // ==========================================
+    // 48-51. ADMIN ANALYTICS, FILE UPLOAD & LOCATIONS
+    // ==========================================
+    getAdminAnalytics: builder.query({
+      query: () => "/admin/analytics",
+      providesTags: ["Analytics"],
+    }),
+
     uploadFile: builder.mutation({
       query: (formData) => ({
         url: "/files/upload",
@@ -383,7 +661,7 @@ export const {
   useDeleteProductMutation,
   useGetRelatedProductsQuery,
   useGetRelatedProductsBySlugQuery,
-  // Users
+  // Users & Addresses
   useGetUsersQuery,
   useGetUserByIdQuery,
   useCreateUserMutation,
@@ -391,10 +669,18 @@ export const {
   useUpdateUserMutation,
   useDeleteUserMutation,
   useCheckUserAvailabilityMutation,
+  useGetAddressesQuery,
+  useAddAddressMutation,
+  useUpdateAddressMutation,
+  useSetDefaultAddressMutation,
+  useDeleteAddressMutation,
   // Auth
   useLoginUserMutation,
+  useLogoutUserMutation,
   useGetUserProfileQuery,
   useLazyGetUserProfileQuery,
+  useUpdateProfileMutation,
+  useChangePasswordMutation,
   useRefreshTokenMutation,
   // Categories
   useGetCategoriesQuery,
@@ -404,7 +690,35 @@ export const {
   useDeleteCategoryMutation,
   useGetCategoryBySlugQuery,
   useGetCategoryProductsQuery,
-  // Files & Locations
+  // Orders
+  usePlaceOrderMutation,
+  useGetMyOrdersQuery,
+  useGetAllOrdersQuery,
+  useTrackOrderQuery,
+  useLazyTrackOrderQuery,
+  useCancelOrderMutation,
+  useRequestOrderReturnMutation,
+  useUpdateOrderStatusMutation,
+  // Reviews
+  useGetProductReviewsQuery,
+  useCreateProductReviewMutation,
+  useToggleReviewHelpfulMutation,
+  // Coupons
+  useValidateCouponMutation,
+  useGetCouponsQuery,
+  useCreateCouponMutation,
+  useDeleteCouponMutation,
+  // Cart & Wishlist
+  useGetServerCartQuery,
+  useLazyGetServerCartQuery,
+  useSyncServerCartMutation,
+  useClearServerCartMutation,
+  useGetServerWishlistQuery,
+  useLazyGetServerWishlistQuery,
+  useAddServerWishlistItemMutation,
+  useRemoveServerWishlistItemMutation,
+  // Admin Analytics, Files & Locations
+  useGetAdminAnalyticsQuery,
   useUploadFileMutation,
   useGetFileQuery,
   useGetLocationsQuery,

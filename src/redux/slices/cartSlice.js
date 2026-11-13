@@ -98,6 +98,11 @@ const cartSlice = createSlice({
       state.items = [];
       saveCartToStorage([]);
     },
+    setCartItems: (state, action) => {
+      state.items = Array.isArray(action.payload) ? action.payload : [];
+      state.isHydrated = true;
+      saveCartToStorage(state.items);
+    },
     setPendingCartItem: (state, action) => {
       state.pendingCartItem = action.payload;
     },
@@ -113,6 +118,7 @@ export const {
   removeFromCart,
   updateQuantity,
   clearCart,
+  setCartItems,
   setPendingCartItem,
   clearPendingCartItem,
 } = cartSlice.actions;

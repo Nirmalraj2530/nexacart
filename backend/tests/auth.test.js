@@ -224,14 +224,22 @@ describe("NexaCart Backend — Authentication & Security Suite", () => {
   });
 
   describe("Token Generator & Password Security Unit Logic", () => {
-    it("generateToken creates a valid verifiable JWT containing id and role", () => {
+    it("generateToken creates an AES-256-GCM encrypted JWT that hides plaintext id/role", () => {
       const userId = "64f1a2b3c4d5e6f7a8b9c0d1";
       const token = generateToken(userId, "admin");
       assert.ok(token, "Token should be non-empty string");
 
-      const decoded = jwt.verify(token, TEST_SECRET);
-      assert.equal(decoded.id, userId);
-      assert.equal(decoded.role, "admin");
+      // Outer JWT only carries encrypted payload, not plaintext id or role
+      const decodedOuter = jwt.verify(token, TEST_SECRET);
+      assert.ok(decodedOuter.enc, "Encrypted payload field 'enc' must be present");
+      assert.equal(decodedOuter.id, undefined, "Plaintext id must NOT be exposed in JWT payload");
+      assert.equal(decodedOuter.role, undefined, "Plaintext role must NOT be exposed in JWT payload");
+
+      // Decrypting with verifyToken recovers id, role, and jti
+      const decrypted = generateToken.verifyToken(token);
+      assert.equal(decrypted.id, userId);
+      assert.equal(decrypted.role, "admin");
+      assert.ok(decrypted.jti);
     });
 
     it("User schema hashes passwords and matchPassword verifies correctly", async () => {

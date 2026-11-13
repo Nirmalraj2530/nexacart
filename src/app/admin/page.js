@@ -6,6 +6,7 @@ import {
   useGetProductsQuery,
   useGetCategoriesQuery,
   useGetUsersQuery,
+  useGetAdminAnalyticsQuery,
 } from "@/redux/services/productApi";
 import { formatCurrency, cleanImageUrl } from "@/utils/formatters";
 import { Button } from "@/components/common/Button";
@@ -40,7 +41,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AdminDashboardPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isManager } = useAuth();
   const {
     data: products = [],
     isLoading: isProductsLoading,
@@ -50,10 +51,27 @@ export default function AdminDashboardPage() {
   } = useGetProductsQuery();
   const { data: categories = [], isLoading: isCategoriesLoading } = useGetCategoriesQuery();
   const { data: users = [], isLoading: isUsersLoading } = useGetUsersQuery(undefined, { skip: !isAdmin });
+  const { data: analytics } = useGetAdminAnalyticsQuery(undefined, { skip: !isManager });
 
-  const totalProducts = products.length;
-  const totalCategories = categories.length;
-  const totalUsers = users.length;
+  const liveKpis = analytics?.kpis;
+  const totalProducts = liveKpis?.totalProducts ?? products.length;
+  const totalCategories = liveKpis?.totalCategories ?? categories.length;
+  const totalUsers = liveKpis?.totalUsers ?? users.length;
+  const totalRevenueDisplay = liveKpis ? liveKpis.totalRevenue : DEMO_KPI.totalRevenue;
+  const totalOrdersDisplay = liveKpis ? liveKpis.totalOrders : DEMO_KPI.totalOrders;
+  const statusMap = analytics?.ordersByStatus;
+  const hasRealOrders = Boolean(liveKpis && liveKpis.totalOrders > 0);
+  const lowStockRows =
+    analytics?.lowStockProducts?.length > 0
+      ? analytics.lowStockProducts.map((p) => ({
+          productId: p.id,
+          productTitle: p.title,
+          category: p.category?.name || "General",
+          currentStock: p.stock ?? 0,
+          reorderLevel: 15,
+          status: (p.stock ?? 0) <= 10 ? "critical" : "warning",
+        }))
+      : LOW_STOCK_ALERTS;
   const recentProducts = products.slice(0, 5);
 
   return (
@@ -78,6 +96,11 @@ export default function AdminDashboardPage() {
           <Link href="/admin/products/create">
             <Button variant="primary" size="sm" icon={Plus}>
               Create Product
+            </Button>
+          </Link>
+          <Link href="/admin/categories">
+            <Button variant="outline" size="sm" icon={Layers}>
+              Manage Categories
             </Button>
           </Link>
           <Link href="/admin/products">
@@ -122,24 +145,29 @@ export default function AdminDashboardPage() {
           </span>
         </Link>
 
-        {/* Demo 7-Day Revenue */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs">
+        {/* Total Revenue */}
+        <Link href="/admin/orders" className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:border-indigo-400 hover:shadow-md transition-all group">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Weekly Revenue</span>
-              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded ml-1.5">Demo</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                {hasRealOrders ? "Total Revenue" : "Weekly Revenue"}
+              </span>
+              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ml-1.5 ${hasRealOrders ? "text-emerald-700 bg-emerald-50" : "text-amber-600 bg-amber-50"}`}>
+                {hasRealOrders ? "Live" : "Demo"}
+              </span>
             </div>
             <div className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-600">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
           <span className="text-3xl font-black text-slate-900 block mt-2">
-            {formatCurrency(DEMO_KPI.totalRevenue)}
+            {formatCurrency(hasRealOrders ? totalRevenueDisplay : DEMO_KPI.totalRevenue)}
           </span>
           <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-            <TrendingUp className="w-3 h-3" /> +{DEMO_KPI.revenueGrowth}% vs last week
+            <TrendingUp className="w-3 h-3" />{" "}
+            {hasRealOrders ? `${totalOrdersDisplay} live orders` : `+${DEMO_KPI.revenueGrowth}% vs last week`}
           </span>
-        </div>
+        </Link>
 
         {/* Active Users or Total Orders */}
         {isAdmin ? (
@@ -158,20 +186,20 @@ export default function AdminDashboardPage() {
             </span>
           </Link>
         ) : (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs">
+          <Link href="/admin/orders" className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:border-indigo-400 hover:shadow-md transition-all group">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Demo Orders Count</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Orders</span>
               <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-600">
                 <Package className="w-5 h-5" />
               </div>
             </div>
             <span className="text-3xl font-black text-slate-900 block mt-2">
-              {DEMO_KPI.totalOrders}
+              {totalOrdersDisplay}
             </span>
             <span className="text-xs text-slate-500 font-semibold block mt-1">
-              +{DEMO_KPI.ordersGrowth}% fulfillment velocity
+              Manage order fulfillment
             </span>
-          </div>
+          </Link>
         )}
       </div>
 
@@ -193,12 +221,31 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="space-y-3 pt-2">
-            {[
-              { label: "Delivered", count: DEMO_KPI.deliveredOrders, color: "bg-emerald-500", pct: 62 },
-              { label: "Shipped & In Transit", count: DEMO_KPI.shippedOrders, color: "bg-indigo-500", pct: 24 },
-              { label: "Processing & Pending", count: DEMO_KPI.pendingOrders, color: "bg-amber-500", pct: 9 },
-              { label: "Cancelled Orders", count: DEMO_KPI.cancelledOrders, color: "bg-rose-500", pct: 5 },
-            ].map((stat, idx) => (
+            {(hasRealOrders && statusMap
+              ? [
+                  { label: "Delivered", count: statusMap.Delivered || 0, color: "bg-emerald-500" },
+                  {
+                    label: "Shipped & In Transit",
+                    count: (statusMap.Shipped || 0) + (statusMap["Out for Delivery"] || 0),
+                    color: "bg-indigo-500",
+                  },
+                  {
+                    label: "Processing & Pending",
+                    count: (statusMap.Pending || 0) + (statusMap.Confirmed || 0) + (statusMap.Processing || 0),
+                    color: "bg-amber-500",
+                  },
+                  { label: "Cancelled Orders", count: statusMap.Cancelled || 0, color: "bg-rose-500" },
+                ].map((s) => ({
+                  ...s,
+                  pct: totalOrdersDisplay > 0 ? Math.round((s.count / totalOrdersDisplay) * 100) : 0,
+                }))
+              : [
+                  { label: "Delivered", count: DEMO_KPI.deliveredOrders, color: "bg-emerald-500", pct: 62 },
+                  { label: "Shipped & In Transit", count: DEMO_KPI.shippedOrders, color: "bg-indigo-500", pct: 24 },
+                  { label: "Processing & Pending", count: DEMO_KPI.pendingOrders, color: "bg-amber-500", pct: 9 },
+                  { label: "Cancelled Orders", count: DEMO_KPI.cancelledOrders, color: "bg-rose-500", pct: 5 },
+                ]
+            ).map((stat, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex justify-between text-xs font-semibold">
                   <span className="text-slate-700">{stat.label}</span>
@@ -212,7 +259,9 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400">
-            Simulated breakdown for portfolio presentation. Real orders sync to your browser localStorage.
+            {hasRealOrders
+              ? "Live breakdown aggregated directly from MongoDB customer orders."
+              : "Showing demo breakdown until the first live customer order is placed."}
           </div>
         </div>
       </div>
@@ -230,7 +279,7 @@ export default function AdminDashboardPage() {
             </div>
             <p className="text-xs text-slate-500 mt-0.5">Products with inventory near or below reorder safety thresholds</p>
           </div>
-          <span className="text-xs font-bold text-slate-400">{LOW_STOCK_ALERTS.length} Alerts Active</span>
+          <span className="text-xs font-bold text-slate-400">{lowStockRows.length} Alerts Active</span>
         </div>
 
         <div className="admin-table-wrap">
@@ -245,7 +294,7 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {LOW_STOCK_ALERTS.map((alert) => (
+              {lowStockRows.map((alert) => (
                 <tr key={alert.productId}>
                   <td>
                     <strong className="text-slate-900 text-xs">{alert.productTitle}</strong>
@@ -282,7 +331,7 @@ export default function AdminDashboardPage() {
         <div className="p-5 sm:p-6 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-base font-bold text-slate-900">Recently Added Products (Live API)</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Latest items retrieved directly from the EscuelaJS catalog</p>
+            <p className="text-xs text-slate-500 mt-0.5">Latest items retrieved directly from the NexaCart backend catalog</p>
           </div>
           <Link href="/admin/products">
             <Button variant="ghost" size="sm" icon={ArrowRight}>

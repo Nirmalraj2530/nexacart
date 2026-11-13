@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
 import { selectOrders, hydrateOrders } from "@/redux/slices/orderSlice";
+import { useLazyTrackOrderQuery } from "@/redux/services/productApi";
 import { formatCurrency } from "@/utils/formatters";
 import { Button } from "@/components/common/Button";
 import { LiveDeliveryTracker } from "@/components/order/LiveDeliveryTracker";
@@ -18,12 +19,20 @@ function TrackOrderContent() {
   const initialId = searchParams.get("id") || "";
   const [searchQuery, setSearchQuery] = useState(initialId);
   const [submittedQuery, setSubmittedQuery] = useState(initialId);
+  const [triggerTrackOrder, { data: apiOrder, isFetching: isTrackingApi }] = useLazyTrackOrderQuery();
 
   useEffect(() => {
     dispatch(hydrateOrders());
   }, [dispatch]);
 
-  const activeOrder = useMemo(() => {
+  useEffect(() => {
+    const q = (submittedQuery || "").trim().toUpperCase();
+    if (q) {
+      triggerTrackOrder(q);
+    }
+  }, [submittedQuery, triggerTrackOrder]);
+
+  const localMatch = useMemo(() => {
     const q = (submittedQuery || "").trim().toUpperCase();
     if (!q) return null;
     return (
@@ -34,6 +43,19 @@ function TrackOrderContent() {
       ) || null
     );
   }, [submittedQuery, orders]);
+
+  const activeOrder = useMemo(() => {
+    const q = (submittedQuery || "").trim().toUpperCase();
+    if (!q) return null;
+    if (
+      apiOrder &&
+      ((apiOrder.id && apiOrder.id.toUpperCase() === q) ||
+        (apiOrder.trackingId && apiOrder.trackingId.toUpperCase() === q))
+    ) {
+      return apiOrder;
+    }
+    return localMatch;
+  }, [submittedQuery, apiOrder, localMatch]);
 
   const searched = Boolean(submittedQuery.trim());
 
@@ -105,7 +127,13 @@ function TrackOrderContent() {
       </div>
 
       {/* Result Section */}
-      {searched && !activeOrder && (
+      {searched && isTrackingApi && !activeOrder && (
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-8 text-center text-sm text-slate-500">
+          Looking up tracking record...
+        </div>
+      )}
+
+      {searched && !isTrackingApi && !activeOrder && (
         <div className="bg-white rounded-3xl border border-slate-200/80 p-8 text-center space-y-3">
           <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
           <h3 className="text-lg font-bold text-slate-900">

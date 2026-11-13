@@ -15,9 +15,10 @@ router.post("/login", loginValidation, validate, authController.login);
 router.post("/check-email", checkEmailValidation, validate, authController.checkAvailability);
 router.post("/logout", authController.logout);
 
-// Protected Routes (Bearer Token Required)
+// Protected Routes (Encrypted Bearer Token Required)
 router.get("/profile", protect, authController.getProfile);
+router.put("/profile", protect, authController.updateProfile);
+router.put("/change-password", protect, authController.changePassword);
 router.post("/refresh-token", protect, authController.refreshToken);
 
 module.exports = router;
-

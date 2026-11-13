@@ -13,10 +13,11 @@ import {
   openRegisterModal,
   closeLoginModal,
 } from "@/redux/slices/authSlice";
+import { useLogoutUserMutation } from "@/redux/services/productApi";
 import { addToast } from "@/redux/slices/uiSlice";
 
 /**
- * Custom Hook for handling authentication, roles, session status, and demo logins.
+ * Custom Hook for handling authentication, roles, session status, and logout revocation.
  */
 export function useAuth() {
   const dispatch = useDispatch();
@@ -25,6 +26,7 @@ export function useAuth() {
   const user = useSelector(selectAuthUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const isHydrated = useSelector(selectIsHydrated);
+  const [logoutUserApi] = useLogoutUserMutation();
 
   // Normalize role string from backend API or demo user
   const rawRole = (user?.role || "").toLowerCase();
@@ -45,7 +47,7 @@ export function useAuth() {
       let mockUser = {
         id: 1,
         name: "Alex Vance (Admin)",
-        email: "admin@nexacart.com",
+        email: "admin@gmail.com",
         role: "Admin",
         avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
       };
@@ -80,7 +82,13 @@ export function useAuth() {
     [dispatch]
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await logoutUserApi().unwrap();
+    } catch {
+      // Best-effort token revocation on backend; clear local session regardless
+    }
+
     dispatch(logoutAction());
     dispatch(
       addToast({
@@ -92,7 +100,7 @@ export function useAuth() {
       router.replace("/");
     }
     dispatch(openLoginModal());
-  }, [dispatch, pathname, router]);
+  }, [dispatch, pathname, router, logoutUserApi]);
 
   const simulateSessionExpired = useCallback(() => {
     dispatch(logoutAction());

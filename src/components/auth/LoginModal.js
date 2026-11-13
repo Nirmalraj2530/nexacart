@@ -39,6 +39,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronDown,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 // Curated avatar presets for instant selection during registration
@@ -67,6 +69,7 @@ export function LoginModal() {
   // Login form state (empty by default - no predefined credentials)
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -76,6 +79,7 @@ export function LoginModal() {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
+  const [showRegPassword, setShowRegPassword] = useState(false);
   const [regAvatar, setRegAvatar] = useState(AVATAR_PRESETS[0].url);
   const [regError, setRegError] = useState("");
   const [nameError, setNameError] = useState("");
@@ -92,13 +96,33 @@ export function LoginModal() {
     setRegPasswordError("");
   };
 
+  const clearRegisterForm = () => {
+    setRegName("");
+    setRegEmail("");
+    setRegPassword("");
+    setRegAvatar(AVATAR_PRESETS[0].url);
+    setShowRegPassword(false);
+    resetErrors();
+  };
+
+  const clearLoginForm = () => {
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    resetErrors();
+  };
+
   const handleTabSwitch = (tab) => {
     resetErrors();
+    setShowPassword(false);
+    setShowRegPassword(false);
     dispatch(setAuthModalTab(tab));
   };
 
   const handleClose = () => {
     resetErrors();
+    setShowPassword(false);
+    setShowRegPassword(false);
     dispatch(closeLoginModal());
   };
 
@@ -173,6 +197,7 @@ export function LoginModal() {
             type: "success",
           })
         );
+        clearLoginForm();
         dispatch(closeLoginModal());
 
         if (trustedRole === "admin" || trustedRole === "manager") {
@@ -185,8 +210,13 @@ export function LoginModal() {
         }
       }
     } catch (err) {
-      console.error("[LoginModal] ❌ Login error:", err);
-      if (err?.status === "FETCH_ERROR" && (trimmedEmail === "admin@nexacart.com" || trimmedEmail === "admin@mail.com")) {
+      console.error("[LoginModal] Login error:", err);
+      if (
+        err?.status === "FETCH_ERROR" &&
+        ((trimmedEmail === "admin@gmail.com" && enteredPassword === "admin") ||
+          trimmedEmail === "admin@nexacart.com" ||
+          trimmedEmail === "admin@mail.com")
+      ) {
         loginAsRole("Admin");
         dispatch(closeLoginModal());
         router.push("/admin");
@@ -225,7 +255,7 @@ export function LoginModal() {
     e.preventDefault();
     setRegError("");
     setNameError("");
-    setRegEmailError("");
+    setRegEmailError(""); 
     setRegPasswordError("");
 
     const trimmedName = (regName || "").trim();
@@ -250,7 +280,7 @@ export function LoginModal() {
       console.log("[LoginModal] Availability verification result:", availRes);
 
       if (availRes && availRes.isAvailable === false) {
-        setRegEmailError("✕ This email is already registered. Please sign in instead.");
+        setRegEmailError("[X] This email is already registered. Please sign in instead.");
         setRegError("An account with this email already exists. Please sign in instead.");
         return;
       }
@@ -272,9 +302,12 @@ export function LoginModal() {
       const createdUser = await registerUser(payload).unwrap();
       console.log("[LoginModal] Registration completed successfully:", createdUser);
 
+      // Clear entered registration data upon successful registration
+      clearRegisterForm();
+
       dispatch(
         addToast({
-          message: `🎉 Account created successfully! Welcome to NexaCart, ${createdUser.name}!`,
+          message: `Account created successfully! Welcome to NexaCart, ${createdUser.name}!`,
           type: "success",
         })
       );
@@ -306,7 +339,7 @@ export function LoginModal() {
         rawMsg.toLowerCase().includes("already") ||
         rawMsg.toLowerCase().includes("exist")
       ) {
-        setRegEmailError("✕ This email is already registered. Please sign in instead.");
+        setRegEmailError("[X] This email is already registered. Please sign in instead.");
         setRegError("An account with this email already exists. Please sign in instead.");
       } else if (rawMsg) {
         setRegError(rawMsg);
@@ -316,7 +349,57 @@ export function LoginModal() {
     }
   };
 
-  const handleQuickRoleSelect = (roleName) => {
+  const handleQuickRoleSelect = async (roleName) => {
+    const demoCredentials = {
+      Admin: { email: "admin@gmail.com", password: "admin" },
+      Manager: { email: "manager@nexacart.com", password: "changeme123" },
+      Customer: { email: "customer@nexacart.com", password: "changeme123" },
+    };
+
+    const creds = demoCredentials[roleName];
+    if (creds) {
+      try {
+        const res = await loginUser(creds).unwrap();
+        if (res?.access_token) {
+          const userObj = res.user || {
+            id: res.id,
+            name: res.name,
+            email: res.email,
+            role: res.role,
+            avatar: res.avatar,
+          };
+          dispatch(setCredentials({ access_token: res.access_token, user: userObj }));
+          dispatch(
+            addToast({
+              message: `Signed in as ${userObj.name || roleName}`,
+              type: "success",
+            })
+          );
+          dispatch(closeLoginModal());
+          if (roleName === "Admin" || roleName === "Manager") {
+            router.push("/admin");
+          } else {
+            handlePendingCartAdd();
+            if (pathname?.startsWith("/admin")) {
+              router.push("/");
+            }
+          }
+          return;
+        }
+      } catch (err) {
+        if (err?.status !== "FETCH_ERROR") {
+          dispatch(
+            addToast({
+              message: err?.friendlyMessage || "Quick login failed.",
+              type: "error",
+            })
+          );
+          return;
+        }
+      }
+    }
+
+    // Offline fallback only when backend server is unreachable
     loginAsRole(roleName);
     dispatch(closeLoginModal());
     if (roleName === "Admin" || roleName === "Manager") {
@@ -334,7 +417,7 @@ export function LoginModal() {
       isOpen={isOpen}
       onClose={handleClose}
       title={activeTab === "register" ? "Create Your Account" : "Sign In to NexaCart"}
-      maxWidth={activeTab === "register" ? "38rem" : "32rem"}
+      maxWidth="32rem"
     >
       {/* Modern Tabs */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-5 border border-slate-200 dark:border-slate-700">
@@ -390,7 +473,7 @@ export function LoginModal() {
                   onClick={() => handleTabSwitch("register")}
                   className="self-start text-xs font-bold underline hover:opacity-80 transition-opacity"
                 >
-                  Create an Account Now →
+                  Create an Account Now ->
                 </button>
               )}
             </div>
@@ -413,7 +496,7 @@ export function LoginModal() {
 
           <Input
             label="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             icon={Lock}
             placeholder="Enter your password"
             value={password}
@@ -422,6 +505,21 @@ export function LoginModal() {
               setPasswordError("");
               setLoginError("");
             }}
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 flex items-center justify-center focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4 text-slate-500" />
+                ) : (
+                  <Eye className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            }
             error={passwordError}
             required
           />
@@ -444,7 +542,7 @@ export function LoginModal() {
               onClick={() => handleTabSwitch("register")}
               className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
             >
-              Don&apos;t have an account? Create one now →
+              Don&apos;t have an account? Create one now ->
             </button>
           </div>
 
@@ -518,63 +616,74 @@ export function LoginModal() {
                   onClick={() => handleTabSwitch("login")}
                   className="self-start text-xs font-bold underline hover:opacity-80 transition-opacity"
                 >
-                  Sign in to this account →
+                  Sign in to this account ->
                 </button>
               )}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Full Name */}
-            <Input
-              label="Full Name"
-              type="text"
-              icon={User}
-              placeholder="e.g. Rahul Sharma"
-              value={regName}
-              onChange={(e) => {
-                setRegName(e.target.value);
-                setNameError("");
-                setRegError("");
-              }}
-              error={nameError}
-              required
-            />
+          {/* 1. Name */}
+          <Input
+            label="Name"
+            type="text"
+            icon={User}
+            placeholder="e.g. Rahul Sharma"
+            value={regName}
+            onChange={(e) => {
+              setRegName(e.target.value);
+              setNameError("");
+              setRegError("");
+            }}
+            error={nameError}
+            required
+          />
 
-            {/* Password */}
-            <Input
-              label="Password"
-              type="password"
-              icon={Lock}
-              placeholder="Min. 6 characters"
-              value={regPassword}
-              onChange={(e) => {
-                setRegPassword(e.target.value);
-                setRegPasswordError("");
-                setRegError("");
-              }}
-              error={regPasswordError}
-              required
-            />
-          </div>
+          {/* 2. Email ID */}
+          <Input
+            label="Email ID"
+            type="email"
+            icon={Mail}
+            placeholder="yourname@example.com"
+            value={regEmail}
+            onChange={(e) => {
+              setRegEmail(e.target.value);
+              setRegEmailError("");
+              setRegError("");
+            }}
+            error={regEmailError}
+            required
+          />
 
-          {/* Email Address */}
-          <div>
-            <Input
-              label="Email Address"
-              type="email"
-              icon={Mail}
-              placeholder="yourname@example.com"
-              value={regEmail}
-              onChange={(e) => {
-                setRegEmail(e.target.value);
-                setRegEmailError("");
-                setRegError("");
-              }}
-              error={regEmailError}
-              required
-            />
-          </div>
+          {/* 3. Password with Eye Icon */}
+          <Input
+            label="Password"
+            type={showRegPassword ? "text" : "password"}
+            icon={Lock}
+            placeholder="Min. 6 characters"
+            value={regPassword}
+            onChange={(e) => {
+              setRegPassword(e.target.value);
+              setRegPasswordError("");
+              setRegError("");
+            }}
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowRegPassword((prev) => !prev)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 flex items-center justify-center focus:outline-none"
+                aria-label={showRegPassword ? "Hide password" : "Show password"}
+                title={showRegPassword ? "Hide password" : "Show password"}
+              >
+                {showRegPassword ? (
+                  <EyeOff className="w-4 h-4 text-slate-500" />
+                ) : (
+                  <Eye className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            }
+            error={regPasswordError}
+            required
+          />
 
           {/* Avatar Preset Selector */}
           <div>
@@ -625,7 +734,7 @@ export function LoginModal() {
               onClick={() => handleTabSwitch("login")}
               className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
             >
-              Already have an account? Sign in here →
+              Already have an account? Sign in here ->
             </button>
           </div>
         </form>

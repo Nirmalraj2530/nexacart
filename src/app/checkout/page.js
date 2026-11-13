@@ -7,6 +7,11 @@ import { useSelector, useDispatch } from "react-redux";
 import { selectCartItems, selectCartSubtotal, clearCart } from "@/redux/slices/cartSlice";
 import { placeOrder } from "@/redux/slices/orderSlice";
 import { addToast } from "@/redux/slices/uiSlice";
+import {
+  usePlaceOrderMutation,
+  useValidateCouponMutation,
+  useGetAddressesQuery,
+} from "@/redux/services/productApi";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/utils/formatters";
 import { applyCoupon } from "@/data/mockCoupons";
@@ -34,9 +39,16 @@ export default function CheckoutPage() {
   const router = useRouter();
   const dispatch = useDispatch();
   const hasRedirectedRef = useRef(false);
-  const { isAuthenticated, isHydrated, openLogin } = useAuth();
+  const { user, isAuthenticated, isHydrated, openLogin } = useAuth();
+  const token = useSelector((state) => state.auth.token);
+  const hasLiveJwt = Boolean(isAuthenticated && token && !token.startsWith("demo_jwt_token_"));
+
   const cartItems = useSelector(selectCartItems);
   const subtotal = useSelector(selectCartSubtotal);
+
+  const [placeOrderApi] = usePlaceOrderMutation();
+  const [validateCouponApi] = useValidateCouponMutation();
+  const { data: savedAddresses = [] } = useGetAddressesQuery(undefined, { skip: !hasLiveJwt });
 
   // Form State (unconditionally initialized at top)
   const [formData, setFormData] = useState({
@@ -49,6 +61,26 @@ export default function CheckoutPage() {
     pincode: "",
     country: "United States",
   });
+  const prefilledRef = useRef(false);
+
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    const defaultAddr = savedAddresses.find((a) => a.isDefault) || savedAddresses[0];
+    if (defaultAddr || user?.email) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: prev.fullName || defaultAddr?.fullName || user?.name || "",
+        email: prev.email || user?.email || "",
+        phone: prev.phone || defaultAddr?.phone || user?.phone || "",
+        address: prev.address || defaultAddr?.address || "",
+        city: prev.city || defaultAddr?.city || "",
+        state: prev.state || defaultAddr?.state || "",
+        pincode: prev.pincode || defaultAddr?.pincode || "",
+        country: prev.country || defaultAddr?.country || "United States",
+      }));
+      if (defaultAddr) prefilledRef.current = true;
+    }
+  }, [savedAddresses, user]);
 
   const [deliveryOption, setDeliveryOption] = useState("standard"); // standard | express
   const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS.CARD);
@@ -82,10 +114,24 @@ export default function CheckoutPage() {
   const effectiveShipping = appliedCoupon?.shippingOverride ? 0 : shippingFee;
   const total = Math.max(0, subtotal - discountAmount + effectiveShipping);
 
-  const handleApplyCoupon = (e) => {
+  const handleApplyCoupon = async (e) => {
     e.preventDefault();
     setCouponError("");
     if (!couponCode.trim()) return;
+
+    try {
+      const apiRes = await validateCouponApi({ code: couponCode.trim(), subtotal }).unwrap();
+      setAppliedCoupon(apiRes);
+      dispatch(addToast({ message: `Coupon "${apiRes.coupon?.code}" applied!`, type: "success" }));
+      return;
+    } catch (err) {
+      if (err?.status !== "FETCH_ERROR") {
+        const msg = err?.data?.message || err?.friendlyMessage || "Invalid or expired coupon code.";
+        setCouponError(msg);
+        dispatch(addToast({ message: msg, type: "error" }));
+        return;
+      }
+    }
 
     const res = applyCoupon(couponCode, subtotal);
     if (res.error) {
@@ -130,11 +176,49 @@ export default function CheckoutPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handlePlaceOrder = (e) => {
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsSubmitting(true);
+
+    if (hasLiveJwt) {
+      try {
+        const apiRes = await placeOrderApi({
+          items: cartItems.map((item) => ({
+            productId: item.id,
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.image || (Array.isArray(item.images) ? item.images[0] : ""),
+            categoryName: item.category?.name || item.categoryName || "General",
+          })),
+          shippingAddress: { ...formData },
+          deliveryOption,
+          paymentMethod,
+          couponCode: appliedCoupon?.coupon?.code || null,
+        }).unwrap();
+
+        const createdOrder = apiRes?.order || apiRes;
+        setIsSubmitting(false);
+        setPlacedOrderDetails(createdOrder);
+        dispatch(placeOrder(createdOrder));
+        dispatch(clearCart());
+        setOrderSuccessModal(true);
+        return;
+      } catch (err) {
+        if (err?.status !== "FETCH_ERROR") {
+          setIsSubmitting(false);
+          dispatch(
+            addToast({
+              message: err?.friendlyMessage || err?.data?.message || "Failed to place order.",
+              type: "error",
+            })
+          );
+          return;
+        }
+      }
+    }
 
     const generatedOrderId = `NEXA-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -166,14 +250,14 @@ export default function CheckoutPage() {
       isDemoOrder: true,
     };
 
-    // Fast order processing simulation
+    // Offline demo fallback
     setTimeout(() => {
       setIsSubmitting(false);
       setPlacedOrderDetails(newOrder);
       dispatch(placeOrder(newOrder));
       dispatch(clearCart());
       setOrderSuccessModal(true);
-    }, 900);
+    }, 500);
   };
 
   // SSR hydration safety guard

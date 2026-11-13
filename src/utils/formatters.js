@@ -158,7 +158,7 @@ export function cleanImageUrl(images, fallback, contextHint) {
   }
 
   // Validate URL protocol
-  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://") || rawUrl.startsWith("data:image/")) {
     return rawUrl;
   }
 

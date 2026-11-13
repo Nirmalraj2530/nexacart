@@ -1,9 +1,11 @@
 const mongoose = require("mongoose");
+const runAutoSeed = require("./autoSeed");
 
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI);
     console.log(`[MongoDB] Connected successfully to host: ${conn.connection.host}, database: ${conn.connection.name}`);
+    await runAutoSeed();
   } catch (error) {
     console.error(`[MongoDB] Connection error: ${error.message}`);
     // In development, log the error rather than immediately terminating the process

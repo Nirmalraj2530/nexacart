@@ -18,7 +18,7 @@ import { Button } from "@/components/common/Button";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/hooks/useAuth";
 import { useApiSimulation } from "@/hooks/useApiSimulation";
-import { Plus, Eye, Edit, Trash2, Search, ArrowLeft, Copy, Shield, Download, Lock } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Search, ArrowLeft, Copy, Shield, Download, Lock, FolderTree } from "lucide-react";
 
 export default function AdminProductsPage() {
   const dispatch = useDispatch();
@@ -69,7 +69,7 @@ export default function AdminProductsPage() {
         title: `[Copy] ${product.title}`,
         price: product.price,
         description: product.description || "Duplicated item entry.",
-        categoryId: product.category?.id || 1,
+        categoryId: product.category?.id || "",
         images: Array.isArray(product.images) && product.images.length > 0 ? product.images : [cleanImageUrl(product.image)],
       };
 
@@ -149,6 +149,11 @@ export default function AdminProductsPage() {
             >
               Export CSV
             </Button>
+            <Link href="/admin/categories">
+              <Button variant="outline" icon={FolderTree}>
+                Manage Categories
+              </Button>
+            </Link>
             <Link href="/admin/products/create">
               <Button variant="primary" icon={Plus}>
                 Create New Product

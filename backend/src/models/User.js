@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: [true, "Password is required"],
-      minlength: [6, "Password must be at least 6 characters long"],
+      minlength: [4, "Password must be at least 4 characters long"],
       select: false,
     },
     role: {
@@ -42,6 +42,44 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    preferences: {
+      currency: { type: String, default: "USD" },
+      emailNotifications: { type: Boolean, default: true },
+      smsNotifications: { type: Boolean, default: false },
+    },
+    addresses: [
+      {
+        fullName: { type: String, required: true, trim: true },
+        phone: { type: String, required: true, trim: true },
+        address: { type: String, required: true, trim: true },
+        city: { type: String, required: true, trim: true },
+        state: { type: String, required: true, trim: true },
+        pincode: { type: String, required: true, trim: true },
+        country: { type: String, default: "United States", trim: true },
+        type: { type: String, enum: ["Home", "Work", "Other"], default: "Home" },
+        isDefault: { type: Boolean, default: false },
+      },
+    ],
+    cart: [
+      {
+        productId: { type: String, required: true },
+        title: { type: String, required: true },
+        price: { type: Number, required: true, min: 0 },
+        image: { type: String, default: "" },
+        categoryName: { type: String, default: "General" },
+        quantity: { type: Number, required: true, min: 1, default: 1 },
+      },
+    ],
+    wishlist: [
+      {
+        productId: { type: String, required: true },
+        title: { type: String, required: true },
+        price: { type: Number, required: true, min: 0 },
+        image: { type: String, default: "" },
+        categoryName: { type: String, default: "General" },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

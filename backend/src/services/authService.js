@@ -15,13 +15,13 @@ const registerUser = async ({ name, email, password, avatar, role }) => {
     throw error;
   }
 
-  // 2. Create user document
+  // 2. Create user document (public signup always creates a customer account)
   const user = await User.create({
     name: name.trim(),
     email: normalizedEmail,
     password,
     avatar: avatar || undefined,
-    role: role || "customer",
+    role: "customer",
   });
 
   // 3. Generate token

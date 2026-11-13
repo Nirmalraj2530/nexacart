@@ -56,10 +56,15 @@ const wishlistSlice = createSlice({
       state.items = [];
       saveWishlist([]);
     },
+    setWishlistItems: (state, action) => {
+      state.items = Array.isArray(action.payload) ? action.payload : [];
+      state.isHydrated = true;
+      saveWishlist(state.items);
+    },
   },
 });
 
-export const { hydrateWishlist, addToWishlist, removeFromWishlist, clearWishlist } = wishlistSlice.actions;
+export const { hydrateWishlist, addToWishlist, removeFromWishlist, clearWishlist, setWishlistItems } = wishlistSlice.actions;
 
 export const selectWishlistItems = (state) => state.wishlist.items;
 export const selectWishlistCount = (state) => state.wishlist.items.length;

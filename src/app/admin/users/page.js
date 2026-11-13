@@ -18,7 +18,7 @@ import { Modal } from "@/components/common/Modal";
 import { ImageUpload } from "@/components/common/ImageUpload";
 import { TableSkeleton } from "@/components/common/Skeleton";
 import { ErrorState } from "@/components/common/ErrorState";
-import { Plus, Edit, Trash2, ArrowLeft, Users, ShieldCheck, Mail } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowLeft, Users, ShieldCheck, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 export default function AdminUsersPage() {
   const dispatch = useDispatch();
@@ -38,6 +38,7 @@ export default function AdminUsersPage() {
     avatar: "https://picsum.photos/800",
   });
   const [availabilityStatus, setAvailabilityStatus] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleOpenCreate = () => {
     setEditUser(null);
@@ -245,9 +246,25 @@ export default function AdminUsersPage() {
 
           <Input
             label="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
+            icon={Lock}
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            rightElement={
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 flex items-center justify-center focus:outline-none"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4 text-slate-500" />
+                ) : (
+                  <Eye className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            }
             required
           />
 

@@ -9,6 +9,7 @@ import {
   Package,
   FolderTree,
   Users,
+  ClipboardList,
   ShoppingBag,
   LogOut,
   X,
@@ -20,7 +21,6 @@ export function AdminSidebar({ isOpen, onClose }) {
   const pathname = usePathname();
   const { user, role, isAdmin, isManager, logout } = useAuth();
 
-  // Exactly the 4 permitted admin modules as specified
   const navItems = [
     {
       label: "Dashboard",
@@ -38,6 +38,12 @@ export function AdminSidebar({ isOpen, onClose }) {
       label: "Categories",
       href: "/admin/categories",
       icon: FolderTree,
+      matchPrefix: true,
+    },
+    {
+      label: "Orders",
+      href: "/admin/orders",
+      icon: ClipboardList,
       matchPrefix: true,
     },
     ...(isAdmin
